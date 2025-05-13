@@ -1,0 +1,17 @@
+# ── Archives ─────────────────────────────
+*.zip
+
+# ── Images ───────────────────────────────
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tif
+*.tiff
+*.svg
+*.webp
+*.ico
+
+# ── Ignores for datasets folder ───────────────────────────────
+datasets/*/
