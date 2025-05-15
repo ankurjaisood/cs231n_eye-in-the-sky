@@ -19,20 +19,27 @@ print("Weights & Biases:", wandb_api)
 if wandb_api is None:
     raise ValueError("Failed to authenticate with Weights & Biases.")
 
-model = YOLO(MODEL_PATH)
+epochs = [10, 25, 50]
+weight_decay = [1e-4, 1e-5, 1e-6]
+learning_rate = [1e-2, 1e-3, 1e-4]
 
-train_results = model.train(
-    data=DATASET_PATH,  # Path to dataset configuration file
-    epochs=25,  # Number of training epochs
-    imgsz=416,  # Image size for training
-    device=0,  # Device to run on (e.g., 'cpu', 0, [0,1,2,3])
-    project="cs231n_eye_in_the_sky", 
-    name="milestone_tests"
-)
+for epoch, wd, lr in zip(epochs, weight_decay, learning_rate):
+    model = YOLO(MODEL_PATH)
 
-# Perform object detection on an image
-results = model("./datasets/kaggle-image-detection/test/images/000246247_jpg.rf.fb915aef7c063ce2ac971f8de0d8b2c1.jpg")  # Predict on an image
-results[0].show()  # Display results
+    train_results = model.train(
+        data=DATASET_PATH,  # Path to dataset configuration file
+        epochs=epoch,  # Number of training epochs
+        lr0=lr,  # Initial learning rate
+        weight_decay=wd,  # Weight decay
+        imgsz=416,  # Image size for training
+        device=0,  # Device to run on (e.g., 'cpu', 0, [0,1,2,3])
+        project="cs231n_eye_in_the_sky", 
+        name="milestone_tests"
+    )
 
-# Export the model to ONNX format for deployment
-path = model.export(format="onnx")  # Returns the path to the exported model
+    # Perform object detection on an image
+    results = model("./datasets/kaggle-image-detection/test/images/000246247_jpg.rf.fb915aef7c063ce2ac971f8de0d8b2c1.jpg")  # Predict on an image
+    results[0].show()  # Display results
+
+    # Export the model to ONNX format for deployment
+    path = model.export(format="onnx")  # Returns the path to the exported model
