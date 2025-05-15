@@ -1,21 +1,33 @@
 import torch
+import wandb
+import os
+from ultralytics import YOLO
+
+W_AND_B_API_KEY = os.getenv("W_AND_B_API_KEY")
+MODEL_PATH = './models/yolov10m.pt'
+DATASET_PATH = './datasets/kaggle-image-detection/data.yaml'
 
 print("PyTorch version:", torch.__version__)
 print("CUDA available:", torch.cuda.is_available())
 print("GPU name:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "None")
 
-MODEL_PATH = './models/yolov10m.pt'
-DATASET_PATH = './datasets/kaggle-image-detection/data.yaml'
+if W_AND_B_API_KEY is None:
+    raise ValueError("W_AND_B_API_KEY not set in environment variables.")
 
-from ultralytics import YOLO
+wandb_api = wandb.login(key=W_AND_B_API_KEY)
+print("Weights & Biases:", wandb_api)
+if wandb_api is None:
+    raise ValueError("Failed to authenticate with Weights & Biases.")
 
 model = YOLO(MODEL_PATH)
 
 train_results = model.train(
     data=DATASET_PATH,  # Path to dataset configuration file
-    epochs=10,  # Number of training epochs
+    epochs=25,  # Number of training epochs
     imgsz=416,  # Image size for training
     device=0,  # Device to run on (e.g., 'cpu', 0, [0,1,2,3])
+    project="cs231n_eye_in_the_sky", 
+    name="milestone_tests"
 )
 
 # Perform object detection on an image

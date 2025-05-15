@@ -16,6 +16,8 @@
 # ── Directories ───────────────────────────────
 runs
 ultralytics
+wandb
+cs231n_eye_in_the_sky
 datasets/*/
 
 # ── Virtual environments ───────────────────────────────
