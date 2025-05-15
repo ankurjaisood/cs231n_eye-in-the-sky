@@ -13,7 +13,9 @@
 *.webp
 *.ico
 
-# ── Ignores for datasets folder ───────────────────────────────
+# ── Directories ───────────────────────────────
+runs
+ultralytics
 datasets/*/
 
 # ── Virtual environments ───────────────────────────────
