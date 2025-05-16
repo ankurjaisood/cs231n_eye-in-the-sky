@@ -4,7 +4,8 @@ import os
 from ultralytics import YOLO
 
 W_AND_B_API_KEY = os.getenv("W_AND_B_API_KEY")
-MODEL_PATH = './models/yolov10m.pt'
+MODEL_NAME = 'yolov10m'
+MODEL_PATH = f'./models/{MODEL_NAME}.pt'
 DATASET_PATH = './datasets/kaggle-image-detection/data.yaml'
 
 print("PyTorch version:", torch.__version__)
@@ -19,7 +20,7 @@ print("Weights & Biases:", wandb_api)
 if wandb_api is None:
     raise ValueError("Failed to authenticate with Weights & Biases.")
 
-epochs = [10, 25, 50]
+epochs = [1, 3, 5]
 weight_decay = [1e-4, 1e-5, 1e-6]
 learning_rate = [1e-2, 1e-3, 1e-4]
 
@@ -34,7 +35,7 @@ for epoch, wd, lr in zip(epochs, weight_decay, learning_rate):
         imgsz=416,  # Image size for training
         device=0,  # Device to run on (e.g., 'cpu', 0, [0,1,2,3])
         project="cs231n_eye_in_the_sky", 
-        name="milestone_tests"
+        name=f"milestone_test_{MODEL_NAME}_epoch_{epoch}_wd_{wd}_lr_{lr}"
     )
 
     # Perform object detection on an image
