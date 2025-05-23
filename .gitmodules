@@ -1,0 +1,3 @@
+[submodule "git_datasets"]
+	path = git_datasets
+	url = https://gitea.casamac.casa/cheskett/cs231n_eye-in-the-sky-lfs.git
