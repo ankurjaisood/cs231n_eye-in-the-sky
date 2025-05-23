@@ -4,3 +4,10 @@
 3. export W_AND_B_API_KEY="YOUR_API_KEY"
 4. yolo settings wandb=True
 5. python run.py
+
+# How to get datasets from git_datasets
+```
+git submodule update --init
+cd git_datasets
+git pull origin master
+```
