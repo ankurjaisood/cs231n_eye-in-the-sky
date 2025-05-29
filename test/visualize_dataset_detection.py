@@ -4,7 +4,7 @@ import random
 import matplotlib.pyplot as plt
 import math
 
-NUMBER_IMAGES_TO_VISUALIZE = 5
+NUMBER_IMAGES_TO_VISUALIZE = 1
 
 # === Configuration ===
 images_dir = 'datasets/kaggle-image-detection/train/images'

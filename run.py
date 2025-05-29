@@ -4,7 +4,7 @@ import os
 from ultralytics import YOLO
 
 W_AND_B_API_KEY = os.getenv("W_AND_B_API_KEY")
-MODEL_NAME = 'yolov10m'
+MODEL_NAME = 'yolov10n'
 MODEL_PATH = f'./models/{MODEL_NAME}.pt'
 DATASET_PATH = './datasets/kaggle-image-detection/data.yaml'
 
