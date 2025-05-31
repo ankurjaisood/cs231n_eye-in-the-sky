@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from transformers import SegformerForSemanticSegmentation, SegformerFeatureExtractor
 from PIL import Image
 
-def run_segmformer(images):
+def run_segformer(images):
     model_name = "nvidia/segformer-b4-finetuned-ade-512-512"
     feature_extractor = SegformerFeatureExtractor.from_pretrained(model_name)
     model = SegformerForSemanticSegmentation.from_pretrained(model_name)
@@ -39,12 +39,14 @@ def visualize_segmentation_masks(images, masks):
 
 if __name__ == "__main__":
     image_paths = ["./datasets/kaggle-image-detection/test/images/000246247_jpg.rf.fb915aef7c063ce2ac971f8de0d8b2c1.jpg",
-                   "./datasets/kaggle-image-detection/test/images/004598275_jpg.rf.65c5b0c5f5b311f21b97690253580759.jpg"]
+                   "./datasets/kaggle-image-segmentation/images/00000.png",
+                   "./datasets/kaggle-image-segmentation/images/00018.png"]
     images = [Image.open(path).convert("RGB") for path in image_paths]
+    resized_images = [img.resize((512, 512), resample=Image.BILINEAR) for img in images]
 
     # Run Segmformer
-    masks = run_segmformer(images)
+    masks = run_segformer(resized_images)
     
     # Visualize the segmentation masks
-    visualize_segmentation_masks(images, masks)
+    visualize_segmentation_masks(resized_images, masks)
 

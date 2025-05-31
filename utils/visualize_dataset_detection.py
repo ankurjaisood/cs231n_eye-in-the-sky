@@ -8,7 +8,7 @@ NUMBER_IMAGES_TO_VISUALIZE = 1
 
 # === Configuration ===
 images_dir = 'datasets/kaggle-image-detection/train/images'
-labels_dir = 'datasets/kaggle-image-detection/train/labels'
+labels_dir = 'datasets/kaggle-image-detection/train/labels_merged'
 class_names = ['10c', '10d', '10h', '10s', '2c', '2d', '2h', '2s',
                '3c', '3d', '3h', '3s', '4c', '4d', '4h', '4s',
                '5c', '5d', '5h', '5s', '6c', '6d', '6h', '6s',
