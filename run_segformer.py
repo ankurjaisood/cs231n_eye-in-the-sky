@@ -41,7 +41,7 @@ def run_segformer(images):
     return predictions
 
 def run_segformer_from_bin(images):
-    # Load the “base” config from the Hub (so the architecture/layout matches exactly)
+    # Load the base config from the Hub
     config = SegformerConfig.from_pretrained(MODEL_NAME)  
     config.num_labels = 53
     config.ignore_mismatched_sizes = True
@@ -54,13 +54,9 @@ def run_segformer_from_bin(images):
     model.load_state_dict(state_dict)  # must match exactly the layer-names in `config`
     model.eval()
     model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-
-    # 5) Recreate the exact same ImageProcessor you used in training
     extractor = SegformerImageProcessor.from_pretrained(MODEL_NAME)
-    #    – If in training you had changed any normalization or resizing from default,
-    #      you must replicate those same kwarg overrides here.  
 
-    # 6) Forward pass
+    # Forward pass
     inputs = extractor(images=images, return_tensors="pt")
     inputs = {k: v.to(model.device) for k, v in inputs.items()}
     with torch.no_grad():
@@ -223,9 +219,9 @@ def create_output_video_from_masks(
 def process_video(video_in_path: str, video_out_path: str):
     """
     1. Extract all frames from input video into a list.
-    2. Convert those frames to resized PIL images (IMG_SIZE × IMG_SIZE).
+    2. Convert those frames to resized PIL images (IMG_SIZE x IMG_SIZE).
     3. Run SegFormer inference in batches over the list of PIL images.
-    4. Post‐process: upsample & colorize masks, create output video.
+    4. Postprocess: upsample & colorize masks, create output video.
     """
     # 1) Extract frames
     original_frames, fps = extract_frames_from_video(video_in_path)

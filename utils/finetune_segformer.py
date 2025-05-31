@@ -9,8 +9,6 @@ from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor
 from torch.optim import AdamW
-
-# ─── 1) Minimal Dataset ────────────────────────────────────────────────────────
 class SegDataset(Dataset):
     def __init__(self, images_dir, masks_dir, feature_extractor, size=512):
         self.images_dir = images_dir
@@ -18,13 +16,13 @@ class SegDataset(Dataset):
         self.extractor  = feature_extractor
         self.size       = size
 
-        # 1) List all image filenames (assuming .png/.jpg/.jpeg)
+        # List all image filenames
         imgs = sorted(
             f for f in os.listdir(images_dir)
             if f.lower().endswith((".png", ".jpg", ".jpeg"))
         )
 
-        # 2) For each image, assume a mask with the same basename+extension exists
+        # For each image, assume a mask with the same basename exists
         self.pairs = []
         for img_fname in imgs:
             base, ext = os.path.splitext(img_fname)
@@ -45,16 +43,13 @@ class SegDataset(Dataset):
     def __getitem__(self, i):
         img_path, msk_path = self.pairs[i]
 
-        # 1) Load image at its native size (no manual resizing)
+        # Load image at its native size 
         img = Image.open(img_path).convert("RGB")
 
-        # 2) Load mask at its native size (no manual resizing)
+        # Load mask at its native size
         msk = Image.open(msk_path).convert("L")
 
-        # 3) Use the feature extractor to: (a) resize to `self.size`,
-        #    (b) normalize, (c) convert to tensor.
-        #
-        #    The `size=` kwarg tells the extractor to resize to (self.size, self.size).
+        # Use the feature extractor to: resize to self.size, normalize, convert to tensor.
         encoding = self.extractor(
             images=img,
             size=self.size,            # both height and width → self.size (e.g. 512)
@@ -62,19 +57,18 @@ class SegDataset(Dataset):
         )
         pixel_values = encoding["pixel_values"].squeeze(0)  # shape: (3, self.size, self.size)
 
-        # 4) Manually resize the mask the same way, with nearest‐neighbor (to preserve integer labels).
+        # Resize the mask the same way, with nearest neighbor (to preserve integer labels).
         msk_resized = msk.resize((self.size, self.size), resample=Image.NEAREST)
         msk_resized_np = np.array(msk_resized, dtype=np.int64)
         labels = torch.from_numpy(msk_resized_np).long()    # shape: (self.size, self.size)
 
         return pixel_values, labels
 
-# ─── 2) Training + Validation + Test ───────────────────────────────────────────
 def train_validate_test(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # 2.1) Load feature extractor + model
+    # Load feature extractor + model
     extractor = SegformerImageProcessor.from_pretrained(args.pretrained)
     model = SegformerForSemanticSegmentation.from_pretrained(
         args.pretrained,
@@ -82,9 +76,9 @@ def train_validate_test(args):
         ignore_mismatched_sizes=True
     )
     model.to(device)
-    model.config.ignore_index = 0  # Set ignore_index to 0 for loss calculation
+    model.config.ignore_index = 0  # Set ignore_index to 0 (background) for loss calculation
 
-    # 2.2) Prepare Datasets + DataLoaders
+    # Prepare Datasets and DataLoaders
     train_ds = SegDataset(
         images_dir=args.train_images,
         masks_dir=args.train_masks,
@@ -126,12 +120,10 @@ def train_validate_test(args):
         pin_memory=True,
     )
 
-    # 2.3) Optimizer
     optimizer = AdamW(model.parameters(), lr=args.lr)
 
-    # 2.4) Training + Validation loop
+    # Training loop
     for epoch in range(1, args.epochs + 1):
-        # ── Training ────────────────────────────────────────────────────────────
         model.train()
         train_loss_accum = 0.0
         for pixel_values, labels in train_loader:
@@ -148,7 +140,7 @@ def train_validate_test(args):
         avg_train_loss = train_loss_accum / len(train_loader)
         print(f"Epoch {epoch}/{args.epochs} — Train Loss: {avg_train_loss:.4f}")
 
-        # ── Validation ──────────────────────────────────────────────────────────
+        # Validation
         model.eval()
         valid_loss_accum = 0.0
         with torch.no_grad():
@@ -161,7 +153,7 @@ def train_validate_test(args):
         avg_valid_loss = valid_loss_accum / len(valid_loader)
         print(f"Epoch {epoch}/{args.epochs} — Valid Loss: {avg_valid_loss:.4f}")
 
-    # 2.5) Final Test Evaluation
+    # Final Evaluation
     model.eval()
     test_loss_accum = 0.0
     with torch.no_grad():
@@ -174,7 +166,7 @@ def train_validate_test(args):
     avg_test_loss = test_loss_accum / len(test_loader)
     print(f"Test Loss: {avg_test_loss:.4f}")
 
-    # 2.6) Save final checkpoint
+    # Save final checkpoint
     os.makedirs(args.output_dir, exist_ok=True)
 
     now_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -193,7 +185,6 @@ def train_validate_test(args):
     torch.save(model.state_dict(), save_path)
     print(f"Training complete. Model saved to {save_path}")
 
-# ─── 3) Argument parsing ───────────────────────────────────────────────────────
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.abspath(__file__))
     kaggle_base = os.path.normpath(os.path.join(base_dir, "..", "datasets", "kaggle-image-segmentation"))
