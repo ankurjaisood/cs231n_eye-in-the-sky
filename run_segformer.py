@@ -10,14 +10,26 @@ from transformers import (
 from PIL import Image
 
 BIN_PATH = None
-#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/lr5e-5_bs8_ep10_20250530_224702/segformer-b4-finetuned-ade-512-512_20250530_231126_nl53_e10_bs8_lr5e-05_is512.bin"
-BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/lr5e-5_bs8_ep10_20250531_135500/segformer-b4-finetuned-ade-512-512_20250531_142024_nl53_e10_bs8_lr5e-05_is512.bin"
+
+# original model for 10 epochs
+BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/lr5e-5_bs8_ep10_20250530_224702/segformer-b4-finetuned-ade-512-512_20250530_231126_nl53_e10_bs8_lr5e-05_is512.bin"
+
+# ignore background pixels for 10 epochs (didnt work well)
+#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/lr5e-5_bs8_ep10_20250531_135500/segformer-b4-finetuned-ade-512-512_20250531_142024_nl53_e10_bs8_lr5e-05_is512.bin"
+
+# ignore background pixels for 20 epochs (worked ok)
+#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/lr5e-5_bs8_ep20_20250531_142026/segformer-b4-finetuned-ade-512-512_20250531_151105_nl53_e20_bs8_lr5e-05_is512.bin"
+
 MODEL_NAME = "nvidia/segformer-b4-finetuned-ade-512-512"
 
-VIDEO_IN  = "/home/anksood/cs231n/cs231n_eye-in-the-sky/git_datasets/clips/2.mp4"
+VIDEO_IN  = "/home/anksood/cs231n/cs231n_eye-in-the-sky/git_datasets/clips/2_416px_10fps.mp4"
 VIDEO_OUT = "./output2.mp4"
 IMG_SIZE = 512
-BATCH_SIZE = 8
+BATCH_SIZE = 64
+
+MIN_BB_AREA = 250
+MIN_PIXEL_REGION_AREA = 2000  # minimum area of a pixel region to be considered valid
+BB_CONFIDENCE_THRESHOLD = 0.35  # minimum confidence score for bounding boxes
 
 id2label = {
     0: "background",
@@ -38,7 +50,7 @@ def run_segformer(images):
 
     logits = outputs.logits
     predictions = torch.argmax(logits, dim=1)
-    return predictions
+    return logits, predictions
 
 def run_segformer_from_bin(images):
     # Load the base config from the Hub
@@ -64,7 +76,7 @@ def run_segformer_from_bin(images):
 
     logits      = outputs.logits
     predictions = torch.argmax(logits, dim=1)  # (B, H_out, W_out)
-    return predictions
+    return logits, predictions
 
 def extract_frames_from_video(video_path: str) -> (list, float):
     """
@@ -117,6 +129,7 @@ def colorize_mask(mask: np.ndarray) -> np.ndarray:
 
 def create_output_video_from_masks(
     original_frames: list,
+    logits: torch.Tensor,
     masks: torch.Tensor,
     output_path: str,
     fps: float
@@ -145,7 +158,12 @@ def create_output_video_from_masks(
 
     for idx in range(num_frames):
         frame_bgr = original_frames[idx]
+        logits_small = logits[idx]
         mask_small = masks[idx].cpu().numpy().astype(np.int32)  # (IMG_SIZE, IMG_SIZE)
+
+        # Compute probs over mask
+        with torch.no_grad():
+            probs_small = torch.softmax(logits_small, dim=0).cpu().numpy()
 
         # Upsample mask back to original size
         mask_full = cv2.resize(
@@ -164,6 +182,14 @@ def create_output_video_from_masks(
             if class_id == 0:
                 continue
 
+            # Upsample the probability map for this class to full resolution
+            prob_small = probs_small[class_id]  # shape: (H_mask, W_mask)
+            prob_full = cv2.resize(
+                prob_small.astype(np.float32),
+                (orig_w, orig_h),
+                interpolation=cv2.INTER_LINEAR
+            )  # shape: (orig_h, orig_w)
+
             class_name = id2label[class_id]
             # Create a binary mask for this class
             binary = (mask_full == class_id).astype(np.uint8) * 255
@@ -171,9 +197,32 @@ def create_output_video_from_masks(
             # Find contours (connected components); OpenCV expects 8‐bit single channel
             contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-            # Draw a box + the class name for each contour
+            filtered_contours = []
             for cnt in contours:
+                area_cc = cv2.contourArea(cnt)
+                if area_cc >= MIN_PIXEL_REGION_AREA:
+                    filtered_contours.append(cnt)
+                else:
+                    print(f"Skipping small contour with area {area_cc} < {MIN_PIXEL_REGION_AREA}")
+
+            # Draw a box + the class name for each contour
+            for cnt in filtered_contours:
                 x, y, w, h = cv2.boundingRect(cnt)
+                area = w * h
+                if area < MIN_BB_AREA:
+                    print(f"Skipping small box with area {area} < {MIN_BB_AREA}")
+                    continue
+
+                # Build a mask for this contour to extract pixel probabilities
+                mask_roi = np.zeros((orig_h, orig_w), dtype=np.uint8)
+                cv2.drawContours(mask_roi, [cnt], -1, 1, thickness=-1)  # fill region
+                pixel_probs = prob_full[mask_roi == 1]
+                score = float(pixel_probs.mean())
+
+                if score < BB_CONFIDENCE_THRESHOLD:
+                    print(f"Skipping box with low score {score:.2f} < {BB_CONFIDENCE_THRESHOLD}")
+                    continue
+
                 # Draw rectangle on color_mask (right side) or on blended image
                 cv2.rectangle(
                     color_mask,
@@ -182,11 +231,12 @@ def create_output_video_from_masks(
                     color=(0, 255, 0),
                     thickness=2
                 )
-                # Put class name text slightly above the top‐left corner of the box
+                # Put class name and confidence text slightly above the top‐left corner of the box
+                text = f"{class_name}:{score:.2f}"
                 text_pos = (x, y - 5 if y - 5 > 5 else y + 15)
                 cv2.putText(
                     color_mask,
-                    class_name,
+                    text,
                     text_pos,
                     1,
                     1,
@@ -231,21 +281,24 @@ def process_video(video_in_path: str, video_out_path: str):
 
     # 3) Run inference in batches
     all_masks = []
+    all_logits = []
     num_frames = len(pil_images)
     for start_idx in range(0, num_frames, BATCH_SIZE):
         end_idx = min(start_idx + BATCH_SIZE, num_frames)
         batch = pil_images[start_idx:end_idx]
         if BIN_PATH and os.path.isfile(BIN_PATH):
             print(f"Running batch {start_idx}..{end_idx-1} through local .bin model...")
-            masks_batch = run_segformer_from_bin(batch)  # (batch_size, IMG_SIZE, IMG_SIZE)
+            logits_batch, masks_batch = run_segformer_from_bin(batch)  # (batch_size, IMG_SIZE, IMG_SIZE)
         else:
             print(f"Running batch {start_idx}..{end_idx-1} through Hub model...")
-            masks_batch = run_segformer(batch)  # (batch_size, IMG_SIZE, IMG_SIZE)
+            logits_batch, masks_batch = run_segformer(batch)  # (batch_size, IMG_SIZE, IMG_SIZE)
+        all_logits.append(logits_batch)
         all_masks.append(masks_batch)
         torch.cuda.empty_cache()
 
+    logits = torch.cat(all_logits, dim=0)
     masks = torch.cat(all_masks, dim=0)
-    create_output_video_from_masks(original_frames, masks, video_out_path, fps)
+    create_output_video_from_masks(original_frames, logits, masks, video_out_path, fps)
 
 if __name__ == "__main__":
     if not os.path.isfile(VIDEO_IN):

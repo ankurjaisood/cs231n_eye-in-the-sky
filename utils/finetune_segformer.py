@@ -76,7 +76,10 @@ def train_validate_test(args):
         ignore_mismatched_sizes=True
     )
     model.to(device)
-    model.config.ignore_index = 0  # Set ignore_index to 0 (background) for loss calculation
+
+    if args.ign_background:
+        print("Ignoring background pixels in loss calculation")
+        model.config.ignore_index = 0  # Set ignore_index to 0 (background) for loss calculation
 
     # Prepare Datasets and DataLoaders
     train_ds = SegDataset(
@@ -214,6 +217,7 @@ if __name__ == "__main__":
     p.add_argument("--batch_size",    type=int, default=4)
     p.add_argument("--lr",            type=float, default=5e-5)
     p.add_argument("--epochs",        type=int, default=3)
+    p.add_argument("--ign_background", action="store_true", default=False, help="Ignore background pixels (default: False)")
 
     # required args
     p.add_argument("--output_dir",    type=str, required=True, help="Where to save finetuned model")

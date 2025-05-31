@@ -28,7 +28,7 @@ mkdir -p "$CHECKPOINT_BASE"
 
 LEARNING_RATES=(5e-5)
 BATCH_SIZES=(8)
-EPOCHS=(10 20)
+EPOCHS=(20 30)
 
 for lr in "${LEARNING_RATES[@]}"; do
     for bs in "${BATCH_SIZES[@]}"; do
