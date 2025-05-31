@@ -15,6 +15,7 @@
 
 # ── Directories ───────────────────────────────
 runs
+logs
 ultralytics
 wandb
 cs231n_eye_in_the_sky

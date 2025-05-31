@@ -91,6 +91,6 @@ def save_split(split_name, split_data):
 
     print(f"Saved {len(split_data)} samples under “{split_name}/”")
 
-save_split("train", train_split)
-save_split("valid",  valid_split)
-save_split("test",  test_split)
+#save_split("train", train_split)
+#save_split("valid",  valid_split)
+#save_split("test",  test_split)
