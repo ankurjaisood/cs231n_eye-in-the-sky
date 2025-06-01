@@ -307,6 +307,7 @@ def train_validate_test(args):
     pretrained_short = os.path.basename(args.pretrained).replace("/", "-")
     filename = (
         f"{pretrained_short}_"
+        f"{args.ign_background}_"
         f"{now_str}_"
         f"nl{args.num_labels}_"
         f"e{args.epochs}_"
@@ -343,8 +344,7 @@ if __name__ == "__main__":
     p.add_argument("--test_masks",    type=str, help="Folder w/ test masks")
 
     # default arguments
-    p.add_argument("--pretrained",    type=str, default="nvidia/segformer-b4-finetuned-ade-512-512",
-                   help="Pretrained SegFormer checkpoint")
+    p.add_argument("--pretrained",    type=str, default="nvidia/segformer-b4-finetuned-ade-512-512", help="Pretrained SegFormer checkpoint")
     p.add_argument("--num_labels",    type=int, default=53, help="Number of classes")
     p.add_argument("--img_size",      type=int, default=512, help="Resize H and W to this")
     p.add_argument("--batch_size",    type=int, default=4)

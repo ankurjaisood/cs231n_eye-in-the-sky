@@ -26,39 +26,60 @@ mkdir -p "$CHECKPOINT_BASE"
 #BATCH_SIZES=(4 8 16)
 #EPOCHS=(3 5 10)
 
-LEARNING_RATES=(5e-5)
-BATCH_SIZES=(8)
-EPOCHS=(25 50 75)
+MODEL_NAME=("nvidia/segformer-b4-finetuned-ade-512-512" "nvidia/segformer-b5-finetuned-ade-512-512")
+LEARNING_RATES=(5e-5 1e-3)
+BATCH_SIZES=(8 16)
+EPOCHS=(25 50)
+IGNORE_BACKGROUND=(0 1)
 
-for lr in "${LEARNING_RATES[@]}"; do
-    for bs in "${BATCH_SIZES[@]}"; do
-        for ep in "${EPOCHS[@]}"; do
+for model in "${MODEL_NAME[@]}"; do
+    for lr in "${LEARNING_RATES[@]}"; do
+        for bs in "${BATCH_SIZES[@]}"; do
+            for ep in "${EPOCHS[@]}"; do
+                for ignore_bg in "${IGNORE_BACKGROUND[@]}"; do
 
-            TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
-            RUN_NAME="lr${lr}_bs${bs}_ep${ep}_${TIMESTAMP}"
-            LOG_FILE="${LOG_DIR}/${RUN_NAME}.log"
-            OUTPUT_DIR="${CHECKPOINT_BASE}/${RUN_NAME}"
-            mkdir -p "$OUTPUT_DIR"
+                    base_model="${model##*/}"
+                    TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+                    RUN_NAME="model-${base_model}_ignbg-${ignore_bg}_lr${lr}_bs${bs}_ep${ep}_${TIMESTAMP}"
+                    LOG_FILE="${LOG_DIR}/${RUN_NAME}.log"
+                    OUTPUT_DIR="${CHECKPOINT_BASE}/${RUN_NAME}"
+                    mkdir -p "$OUTPUT_DIR"
 
-            echo "================================================================="
-            echo "Starting run: $RUN_NAME"
-            echo "  Learning rate: $lr"
-            echo "  Batch size:    $bs"
-            echo "  Epochs:        $ep"
-            echo "  Logging to:    $LOG_FILE"
-            echo "================================================================="
+                    echo "================================================================="
+                    echo "Starting run: $RUN_NAME"
+                    echo "  Model:         $model"
+                    echo "  Learning rate: $lr"
+                    echo "  Batch size:    $bs"
+                    echo "  Epochs:        $ep"
+                    echo "  Ignore background: $ignore_bg"
+                    echo "  Logging to:    $LOG_FILE"
+                    echo "================================================================="
 
-            python "$TRAIN_SCRIPT" \
-                --lr "$lr" \
-                --batch_size "$bs" \
-                --epochs "$ep" \
-                --output_dir "$OUTPUT_DIR" \
-                > "$LOG_FILE" 2>&1
+                    if [ "$ignore_bg" -eq 0 ]; then
+                        python "$TRAIN_SCRIPT" \
+                            --pretrained "$model" \
+                            --lr "$lr" \
+                            --batch_size "$bs" \
+                            --epochs "$ep" \
+                            --output_dir "$OUTPUT_DIR" \
+                            > "$LOG_FILE" 2>&1
+                    else
+                        python "$TRAIN_SCRIPT" \
+                            --pretrained "$model" \
+                            --lr "$lr" \
+                            --batch_size "$bs" \
+                            --epochs "$ep" \
+                            --output_dir "$OUTPUT_DIR" \
+                            --ignore_background \
+                            > "$LOG_FILE" 2>&1
+                    fi
 
-            echo "Finished run: $RUN_NAME"
-            echo "Checkpoint dir: $OUTPUT_DIR"
-            echo "Log saved at:    $LOG_FILE"
-            echo
+                    echo "Finished run: $RUN_NAME"
+                    echo "Checkpoint dir: $OUTPUT_DIR"
+                    echo "Log saved at:    $LOG_FILE"
+                    echo
+                done
+            done
         done
     done
 done
