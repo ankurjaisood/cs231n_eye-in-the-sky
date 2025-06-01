@@ -301,6 +301,25 @@ def train_validate_test(args):
             )
     })
 
+    # Compute per-class IoU
+    num_labels = cm_test.shape[0]
+    per_class_iou = []
+    for k in range(1, num_labels):
+        TP = cm_test[k, k]
+        FP = cm_test[:, k].sum() - TP
+        FN = cm_test[k, :].sum() - TP
+        denom = TP + FP + FN
+        iou_k = TP / denom if denom > 0 else float("nan")
+        per_class_iou.append(iou_k)
+
+    # Compute mean IoU over all non‐background classes
+    valid_iou = [v for v in per_class_iou if not np.isnan(v)]
+    mean_iou = np.mean(valid_iou)
+    wandb.log({
+        "mean_IoU": mean_iou,
+        **{f"IoU/class_{k}": per_class_iou[k-1] for k in range(1, num_labels)}
+    })
+
     # Save final checkpoint
     os.makedirs(args.output_dir, exist_ok=True)
 
