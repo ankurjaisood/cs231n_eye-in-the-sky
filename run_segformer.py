@@ -8,6 +8,7 @@ from transformers import (
     SegformerConfig
 )
 from PIL import Image
+from deep_sort_realtime.deepsort_tracker import DeepSort
 
 BIN_PATH = None
 
@@ -22,14 +23,14 @@ BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoi
 
 MODEL_NAME = "nvidia/segformer-b4-finetuned-ade-512-512"
 
-VIDEO_IN  = "/home/anksood/cs231n/cs231n_eye-in-the-sky/git_datasets/clips/2_416px_10fps.mp4"
+VIDEO_IN  = "/home/anksood/cs231n/cs231n_eye-in-the-sky/git_datasets/clips/2_416px_30fps.mp4"
 VIDEO_OUT = "./output2.mp4"
 IMG_SIZE = 512
 BATCH_SIZE = 64
 
-MIN_BB_AREA = 250
-MIN_PIXEL_REGION_AREA = 2000  # minimum area of a pixel region to be considered valid
-BB_CONFIDENCE_THRESHOLD = 0.35  # minimum confidence score for bounding boxes
+MIN_BB_AREA = 0
+MIN_PIXEL_REGION_AREA = 1500  # minimum area of a pixel region to be considered valid
+BB_CONFIDENCE_THRESHOLD = 0.5  # minimum confidence score for bounding boxes
 
 id2label = {
     0: "background",
@@ -156,6 +157,18 @@ def create_output_video_from_masks(
     if not writer.isOpened():
         raise RuntimeError(f"Cannot open VideoWriter at {output_path}")
 
+    # SORT tracker initalization
+    max_age_num_frames = int(fps * 0.5)
+    num_frames_new_track = max(1, int(fps) // 2)
+    print(f"Initializing DeepSORT tracker with max_age={max_age_num_frames}, n_init={num_frames_new_track}")
+    tracker = DeepSort(
+        max_age=max_age_num_frames,
+        n_init=num_frames_new_track, 
+        max_cosine_distance=0.2,
+        embedder="clip_RN50x4",
+        embedder_gpu=torch.cuda.is_available()
+    )
+
     for idx in range(num_frames):
         frame_bgr = original_frames[idx]
         logits_small = logits[idx]
@@ -175,6 +188,7 @@ def create_output_video_from_masks(
         # Colorize the upsampled mask
         color_mask = colorize_mask(mask_full)
 
+        frame_detections = []
         # For each unique class in mask_full, find contours and draw boxes, labels
         unique_ids = np.unique(mask_full)
         for class_id in unique_ids:
@@ -191,8 +205,13 @@ def create_output_video_from_masks(
             )  # shape: (orig_h, orig_w)
 
             class_name = id2label[class_id]
+            
             # Create a binary mask for this class
             binary = (mask_full == class_id).astype(np.uint8) * 255
+            kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (21,21))
+            binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_close)
+            kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11,11))
+            binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_open)
 
             # Find contours (connected components); OpenCV expects 8‐bit single channel
             contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -223,11 +242,14 @@ def create_output_video_from_masks(
                     print(f"Skipping box with low score {score:.2f} < {BB_CONFIDENCE_THRESHOLD}")
                     continue
 
+                x1, y1, x2, y2 = x, y, x + w, y + h
+                frame_detections.append(([x, y, w, h], score, class_name))
+
                 # Draw rectangle on color_mask (right side) or on blended image
                 cv2.rectangle(
                     color_mask,
-                    (x, y),
-                    (x + w, y + h),
+                    (x1, y1),
+                    (x2, y2),
                     color=(0, 255, 0),
                     thickness=2
                 )
@@ -238,12 +260,43 @@ def create_output_video_from_masks(
                     color_mask,
                     text,
                     text_pos,
-                    1,
-                    1,
-                    (255, 255, 255),
-                    1,
+                    fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                    fontScale=0.6,
+                    color=(255, 255, 255),
+                    thickness=1,
                     lineType=cv2.LINE_AA
                 )
+        
+        # Run DeepSORT tracker on the detected bounding boxes
+        print(f"Frame {idx+1}/{num_frames}: Found {len(frame_detections)} detections")
+        # Run tracker
+        tracks = tracker.update_tracks(frame_detections, frame=frame_bgr)
+
+        # Draw the tracked bounding boxes on the original frame
+        for track in tracks:
+            if not track.is_confirmed():
+                print(f"Skipping unconfirmed track {track.track_id}")
+                continue
+            x1, y1, x2, y2 = map(int, track.to_tlbr())
+            tid = track.track_id
+
+            cv2.rectangle(
+                frame_bgr,
+                (x1, y1),
+                (x2, y2),
+                color=(0, 0, 255),
+                thickness=2
+            )
+            cv2.putText(
+                frame_bgr,
+                f"ID:{tid}",
+                (x1, y1 - 5 if y1 - 5 > 5 else y1 + 15),
+                fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                fontScale=0.6,
+                color=(255, 255, 255),
+                thickness=1
+            )
+
 
         # Create side by side composite
         combined = np.zeros((final_h, final_w, 3), dtype=np.uint8)
