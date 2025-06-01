@@ -129,7 +129,7 @@ nc: 3
 names: ['low', 'none', 'high']
 """
 
-    output_path = "datasets/kaggle-image-detection-flat/data_hilo.yaml"
+    output_path = "../datasets/kaggle-image-detection-flat/data_hilo.yaml"
 
     with open(output_path, 'w') as f:
         f.write(hilo_yaml_content)
@@ -196,14 +196,14 @@ def main():
     # Update training labels
     print("\n2. Updating training labels...")
     train_conversions = update_labels_directory(
-        "datasets/kaggle-image-detection-flat/train/labels",
+        "../datasets/kaggle-image-detection-flat/train/labels",
         class_mapping
     )
 
     # Update validation labels
     print("\n3. Updating validation labels...")
     val_conversions = update_labels_directory(
-        "datasets/kaggle-image-detection-flat/valid/labels",
+        "../datasets/kaggle-image-detection-flat/valid/labels",
         class_mapping
     )
 
@@ -213,8 +213,8 @@ def main():
 
     # Validate conversion
     print("\n5. Validating conversion...")
-    train_valid = validate_conversion("datasets/kaggle-image-detection-flat/train/labels")
-    val_valid = validate_conversion("datasets/kaggle-image-detection-flat/valid/labels")
+    train_valid = validate_conversion("../datasets/kaggle-image-detection-flat/train/labels")
+    val_valid = validate_conversion("../datasets/kaggle-image-detection-flat/valid/labels")
 
     # Summary
     print("\n=== Conversion Complete ===")
