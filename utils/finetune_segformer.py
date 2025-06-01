@@ -319,7 +319,7 @@ def train_validate_test(args):
     save_path = os.path.join(args.output_dir, filename)
     torch.save(model.state_dict(), save_path)
     print(f"Training complete. Model saved to {save_path}")
-
+    wandb.save(save_path)
     wandb.finish()
 
 if __name__ == "__main__":
