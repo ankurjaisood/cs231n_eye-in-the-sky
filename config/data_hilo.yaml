@@ -1,0 +1,5 @@
+train: ../datasets/kaggle-image-detection-flat/train/images
+val: ../datasets/kaggle-image-detection-flat/valid/images
+
+nc: 3
+names: ['low', 'none', 'high']

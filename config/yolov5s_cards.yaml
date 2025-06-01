@@ -1,0 +1,10 @@
+YOLOV5:
+  # Move this file and the other required files to their respective locations under deep_sort_pytorch
+  CFG: "./configs/yolov5s_cards.yaml"
+  WEIGHT: "./detector/YOLOv5/models/yolov5_cards_40_merged_hilo.pt"  # You'll need to replace this with your trained model
+  DATA: './detector/YOLOv5/data/data_hilo.yaml'  # ← This is the key change!
+
+  IMGSZ: [416, 416]
+  SCORE_THRESH: 0.25
+  NMS_THRESH: 0.45
+  MAX_DET: 100
