@@ -196,7 +196,7 @@ def train_validate_test(args):
             "train_loss": avg_train_loss,
             "train_accuracy": train_acc
         }, step=epoch)
-        print(f"Epoch {epoch} — Train Loss: {avg_train_loss:.4f}, Train Acc: {train_acc:.4f}")
+        print(f"Epoch {epoch}/{config.epochs} — Train Loss: {avg_train_loss:.4f}, Train Acc: {train_acc:.4f}")
 
         # Validation
         model.eval()
