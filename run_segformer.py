@@ -13,7 +13,22 @@ from deep_sort_realtime.deepsort_tracker import DeepSort
 BIN_PATH = None
 
 # original model for 10 epochs
-BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/lr5e-5_bs8_ep10_20250530_224702/segformer-b4-finetuned-ade-512-512_20250530_231126_nl53_e10_bs8_lr5e-05_is512.bin"
+#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/lr5e-5_bs8_ep10_20250530_224702/segformer-b4-finetuned-ade-512-512_20250530_231126_nl53_e10_bs8_lr5e-05_is512.bin"
+
+# better model for 25 epochs
+#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/lr5e-5_bs8_ep25_20250531_194451/segformer-b4-finetuned-ade-512-512_20250531_194456_nl53_e25_bs8_lr5e-05_is512.bin"
+
+# 13 classes, for 10 epochs, dont ignore background pixels
+#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-13_ignbg-0_lr5e-5_bs8_ep10_20250601_133004/segformer-b4-finetuned-ade-512-512_False_20250601_133009_nl13_e10_bs8_lr5e-05_is512.bin"
+
+# 13 classes, for 10 epochs, ignore background pixels
+#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-13_ignbg-1_lr5e-5_bs8_ep10_20250601_143122/segformer-b4-finetuned-ade-512-512_True_20250601_143127_nl13_e10_bs8_lr5e-05_is512.bin"
+
+# 4 classes, for 10 epochs, dont ignore background pixels
+#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-4_ignbg-0_lr5e-5_bs8_ep10_20250601_151247/segformer-b4-finetuned-ade-512-512_False_20250601_151252_nl4_e10_bs8_lr5e-05_is512.bin"
+
+# 4 classes, for 10 epochs, ignore background pixels
+BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-4_ignbg-1_lr5e-5_bs8_ep10_20250601_153859/segformer-b4-finetuned-ade-512-512_True_20250601_153903_nl4_e10_bs8_lr5e-05_is512.bin"
 
 # ignore background pixels for 10 epochs (didnt work well)
 #BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/lr5e-5_bs8_ep10_20250531_135500/segformer-b4-finetuned-ade-512-512_20250531_142024_nl53_e10_bs8_lr5e-05_is512.bin"
@@ -23,21 +38,42 @@ BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoi
 
 MODEL_NAME = "nvidia/segformer-b4-finetuned-ade-512-512"
 
-VIDEO_IN  = "/home/anksood/cs231n/cs231n_eye-in-the-sky/git_datasets/clips/2_416px_30fps.mp4"
-VIDEO_OUT = "./output2.mp4"
+VIDEO_IN  = "/home/anksood/cs231n/cs231n_eye-in-the-sky/git_datasets/clips/2_416px_10fps.mp4"
+#VIDEO_IN  = "/home/anksood/cs231n/cs231n_eye-in-the-sky/git_datasets/11_416px_10fps.mp4"
+VIDEO_OUT = "./output7_4classes_ign.mp4"
 IMG_SIZE = 512
-BATCH_SIZE = 64
+BATCH_SIZE = 32
 
-MIN_BB_AREA = 0
+MIN_BB_AREA = 250
 MIN_PIXEL_REGION_AREA = 1500  # minimum area of a pixel region to be considered valid
 BB_CONFIDENCE_THRESHOLD = 0.5  # minimum confidence score for bounding boxes
 
+NUM_CLASSES = 4
+
+ # 52 cards + background
 id2label = {
-    0: "background",
+    0:  "background",
     1:  "A_C",  2: "2_C",  3: "3_C",  4: "4_C",  5: "5_C",  6: "6_C",  7: "7_C",  8: "8_C",  9: "9_C", 10: "10_C", 11: "J_C",  12:"Q_C", 13: "K_C",
     14: "A_S", 15: "2_S", 16: "3_S", 17: "4_S", 18: "5_S", 19: "6_S", 20: "7_S", 21: "8_S", 22: "9_S", 23: "10_S", 24: "J_S", 25: "Q_S", 26: "K_S",
     27: "A_H", 28: "2_H", 29: "3_H", 30: "4_H", 31: "5_H", 32: "6_H", 33: "7_H", 34: "8_H", 35: "9_H", 36: "10_H", 37: "J_H", 38: "Q_H", 39: "K_H",
     40: "A_D", 41: "2_D", 42: "3_D", 43: "4_D", 44: "5_D", 45: "6_D", 46: "7_D", 47: "8_D", 48: "9_D", 49: "10_D", 50: "J_D", 51: "Q_D", 52: "K_D",
+}
+
+# High, Low, None for each suit
+id2label_suits_category = {
+    0:  "background",
+    1:  "C_Low",  2: "C_None", 3:  "C_High",
+    4:  "S_Low",  5: "S_None", 6:  "S_High",
+    7:  "H_Low",  8: "H_None", 9:  "H_High",
+    10: "D_Low", 11: "D_None", 12: "D_High",
+}
+
+# High, Low, None
+id2label_category = {
+    0:  "background",
+    1:  "Low", 
+    2:  "None", 
+    3:  "High",
 }
     
 def run_segformer(images):
@@ -56,7 +92,7 @@ def run_segformer(images):
 def run_segformer_from_bin(images):
     # Load the base config from the Hub
     config = SegformerConfig.from_pretrained(MODEL_NAME)  
-    config.num_labels = 53
+    config.num_labels = NUM_CLASSES
     config.ignore_mismatched_sizes = True
 
     # Instantiate an empty SegFormerForSemanticSegmentation:
@@ -158,8 +194,8 @@ def create_output_video_from_masks(
         raise RuntimeError(f"Cannot open VideoWriter at {output_path}")
 
     # SORT tracker initalization
-    max_age_num_frames = int(fps * 0.5)
-    num_frames_new_track = max(1, int(fps) // 2)
+    max_age_num_frames = int(fps)
+    num_frames_new_track = max(1, int(fps))
     print(f"Initializing DeepSORT tracker with max_age={max_age_num_frames}, n_init={num_frames_new_track}")
     tracker = DeepSort(
         max_age=max_age_num_frames,
@@ -189,6 +225,7 @@ def create_output_video_from_masks(
         color_mask = colorize_mask(mask_full)
 
         frame_detections = []
+        frame_masks = []
         # For each unique class in mask_full, find contours and draw boxes, labels
         unique_ids = np.unique(mask_full)
         for class_id in unique_ids:
@@ -204,13 +241,21 @@ def create_output_video_from_masks(
                 interpolation=cv2.INTER_LINEAR
             )  # shape: (orig_h, orig_w)
 
-            class_name = id2label[class_id]
+            class_name = None
+            if NUM_CLASSES == 53:
+                class_name = id2label[class_id]
+            elif NUM_CLASSES == 13:
+                class_name = id2label_suits_category[class_id]
+            elif NUM_CLASSES == 4:
+                class_name = id2label_category[class_id]
+            else:
+                raise ValueError(f"Unsupported number of classes: {NUM_CLASSES}")
             
             # Create a binary mask for this class
             binary = (mask_full == class_id).astype(np.uint8) * 255
-            kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (21,21))
+            kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11,11))
             binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_close)
-            kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11,11))
+            kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
             binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_open)
 
             # Find contours (connected components); OpenCV expects 8‐bit single channel
@@ -244,6 +289,7 @@ def create_output_video_from_masks(
 
                 x1, y1, x2, y2 = x, y, x + w, y + h
                 frame_detections.append(([x, y, w, h], score, class_name))
+                frame_masks.append(mask_roi)
 
                 # Draw rectangle on color_mask (right side) or on blended image
                 cv2.rectangle(
@@ -270,7 +316,8 @@ def create_output_video_from_masks(
         # Run DeepSORT tracker on the detected bounding boxes
         print(f"Frame {idx+1}/{num_frames}: Found {len(frame_detections)} detections")
         # Run tracker
-        tracks = tracker.update_tracks(frame_detections, frame=frame_bgr)
+        assert len(frame_detections) == len(frame_masks)
+        tracks = tracker.update_tracks(frame_detections, frame=frame_bgr, instance_masks=frame_masks)
 
         # Draw the tracked bounding boxes on the original frame
         for track in tracks:

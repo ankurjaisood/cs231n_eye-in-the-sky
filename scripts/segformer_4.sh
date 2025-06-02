@@ -27,9 +27,9 @@ mkdir -p "$CHECKPOINT_BASE"
 #EPOCHS=(3 5 10)
 
 MODEL_NAME=("nvidia/segformer-b4-finetuned-ade-512-512")
-LEARNING_RATES=(5e-5 1e-3)
-BATCH_SIZES=(8 16)
-EPOCHS=(25)
+LEARNING_RATES=(5e-5)
+BATCH_SIZES=(8)
+EPOCHS=(10)
 IGNORE_BACKGROUND=(0 1)
 
 for model in "${MODEL_NAME[@]}"; do
@@ -40,7 +40,7 @@ for model in "${MODEL_NAME[@]}"; do
 
                     base_model="${model##*/}"
                     TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
-                    RUN_NAME="model-${base_model}_ignbg-${ignore_bg}_lr${lr}_bs${bs}_ep${ep}_${TIMESTAMP}"
+                    RUN_NAME="model-${base_model}_num-classes-4_ignbg-${ignore_bg}_lr${lr}_bs${bs}_ep${ep}_${TIMESTAMP}"
                     LOG_FILE="${LOG_DIR}/${RUN_NAME}.log"
                     OUTPUT_DIR="${CHECKPOINT_BASE}/${RUN_NAME}"
                     mkdir -p "$OUTPUT_DIR"
@@ -57,6 +57,10 @@ for model in "${MODEL_NAME[@]}"; do
 
                     if [ "$ignore_bg" -eq 0 ]; then
                         python "$TRAIN_SCRIPT" \
+                            --num_labels "4" \
+                            --train_masks "/home/anksood/cs231n/cs231n_eye-in-the-sky/datasets/kaggle-image-segmentation/train/masks_4/" \
+                            --valid_masks "/home/anksood/cs231n/cs231n_eye-in-the-sky/datasets/kaggle-image-segmentation/valid/masks_4/" \
+                            --test_masks "/home/anksood/cs231n/cs231n_eye-in-the-sky/datasets/kaggle-image-segmentation/test/masks_4/" \
                             --pretrained "$model" \
                             --lr "$lr" \
                             --batch_size "$bs" \
@@ -65,6 +69,10 @@ for model in "${MODEL_NAME[@]}"; do
                             > "$LOG_FILE" 2>&1
                     else
                         python "$TRAIN_SCRIPT" \
+                            --num_labels "4" \
+                            --train_masks "/home/anksood/cs231n/cs231n_eye-in-the-sky/datasets/kaggle-image-segmentation/train/masks_4/" \
+                            --valid_masks "/home/anksood/cs231n/cs231n_eye-in-the-sky/datasets/kaggle-image-segmentation/valid/masks_4/" \
+                            --test_masks "/home/anksood/cs231n/cs231n_eye-in-the-sky/datasets/kaggle-image-segmentation/test/masks_4/" \
                             --pretrained "$model" \
                             --lr "$lr" \
                             --batch_size "$bs" \
