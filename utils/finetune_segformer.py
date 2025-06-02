@@ -13,6 +13,32 @@ from torch.utils.data import Dataset, DataLoader
 from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor
 from torch.optim import AdamW
 
+ # 52 cards + background
+id2label = {
+    0:  "background",
+    1:  "A_C",  2: "2_C",  3: "3_C",  4: "4_C",  5: "5_C",  6: "6_C",  7: "7_C",  8: "8_C",  9: "9_C", 10: "10_C", 11: "J_C",  12:"Q_C", 13: "K_C",
+    14: "A_S", 15: "2_S", 16: "3_S", 17: "4_S", 18: "5_S", 19: "6_S", 20: "7_S", 21: "8_S", 22: "9_S", 23: "10_S", 24: "J_S", 25: "Q_S", 26: "K_S",
+    27: "A_H", 28: "2_H", 29: "3_H", 30: "4_H", 31: "5_H", 32: "6_H", 33: "7_H", 34: "8_H", 35: "9_H", 36: "10_H", 37: "J_H", 38: "Q_H", 39: "K_H",
+    40: "A_D", 41: "2_D", 42: "3_D", 43: "4_D", 44: "5_D", 45: "6_D", 46: "7_D", 47: "8_D", 48: "9_D", 49: "10_D", 50: "J_D", 51: "Q_D", 52: "K_D",
+}
+
+# High, Low, None for each suit
+id2label_suits_category = {
+    0:  "background",
+    1:  "C_Low",  2: "C_None", 3:  "C_High",
+    4:  "S_Low",  5: "S_None", 6:  "S_High",
+    7:  "H_Low",  8: "H_None", 9:  "H_High",
+    10: "D_Low", 11: "D_None", 12: "D_High",
+}
+
+# High, Low, None
+id2label_category = {
+    0:  "background",
+    1:  "Low", 
+    2:  "None", 
+    3:  "High",
+}
+
 class SegDataset(Dataset):
     def __init__(self, images_dir, masks_dir, feature_extractor, size=512):
         self.images_dir = images_dir
@@ -285,12 +311,25 @@ def train_validate_test(args):
     print(f"Test Loss: {avg_test_loss:.4f}, Test Acc: {test_acc:.4f}")
 
     # Generate confusion matrix
-    cm_test = confusion_matrix(all_labels_test, all_preds_test, labels=list(range(config.num_labels)))
+    cm_test = confusion_matrix(
+        all_labels_test, 
+        all_preds_test, 
+        labels=list(range(config.num_labels))
+    )
     if config.ignore_background:
         cm_test[0, :] = 0
         cm_test[:, 0] = 0
 
-    class_names = [str(i) for i in range(config.num_labels)]
+    class_names = []
+    if config.num_labels == 53:
+        class_names = [id2label[i] for i in range(config.num_labels)]
+    elif config.num_labels == 13:
+        class_names = [id2label_suits_category[i] for i in range(config.num_labels)]
+    elif config.num_labels == 4:
+        class_names = [id2label_category[i] for i in range(config.num_labels)]
+    else:
+        raise ValueError(f"Unsupported number of labels: {config.num_labels}")
+    
     wandb.log({
         "confusion_matrix/test":
             wandb.plot.confusion_matrix(
@@ -299,6 +338,25 @@ def train_validate_test(args):
                 preds=all_preds_test,
                 class_names=class_names
             )
+    })
+
+    wandb.log({
+    "confusion_matrix_heatmap": wandb.sklearn.plot_confusion_matrix(
+        all_labels_test,        # ground‐truth labels
+        all_preds_test,         # predicted labels
+        labels=list(range(config.num_labels)),
+        class_names=class_names
+        )
+    })
+
+    wandb.log({
+    "confusion_matrix_heatmap_normalized": wandb.sklearn.plot_confusion_matrix(
+        all_labels_test,        # ground‐truth labels
+        all_preds_test,         # predicted labels
+        labels=list(range(config.num_labels)),
+        class_names=class_names,
+        normalize="true"
+        )
     })
 
     # Compute per-class IoU
