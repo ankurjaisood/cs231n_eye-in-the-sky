@@ -29,7 +29,7 @@ mkdir -p "$CHECKPOINT_BASE"
 MODEL_NAME=("nvidia/segformer-b4-finetuned-ade-512-512")
 LEARNING_RATES=(5e-5)
 BATCH_SIZES=(8)
-EPOCHS=(10)
+EPOCHS=(25)
 IGNORE_BACKGROUND=(0 1)
 
 for model in "${MODEL_NAME[@]}"; do
@@ -69,6 +69,10 @@ for model in "${MODEL_NAME[@]}"; do
                             > "$LOG_FILE" 2>&1
                     else
                         python "$TRAIN_SCRIPT" \
+                            --num_labels "13" \
+                            --train_masks "/home/anksood/cs231n/cs231n_eye-in-the-sky/datasets/kaggle-image-segmentation/train/masks_13/" \
+                            --valid_masks "/home/anksood/cs231n/cs231n_eye-in-the-sky/datasets/kaggle-image-segmentation/valid/masks_13/" \
+                            --test_masks "/home/anksood/cs231n/cs231n_eye-in-the-sky/datasets/kaggle-image-segmentation/test/masks_13/" \
                             --pretrained "$model" \
                             --lr "$lr" \
                             --batch_size "$bs" \
