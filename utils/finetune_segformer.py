@@ -7,11 +7,13 @@ import argparse
 import datetime
 import wandb
 import numpy as np
+import cv2
 from PIL import Image
 from sklearn.metrics import confusion_matrix
 from torch.utils.data import Dataset, DataLoader
 from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor
 from torch.optim import AdamW
+import albumentations as A
 
  # 52 cards + background
 id2label = {
@@ -40,11 +42,12 @@ id2label_category = {
 }
 
 class SegDataset(Dataset):
-    def __init__(self, images_dir, masks_dir, feature_extractor, size=512):
+    def __init__(self, images_dir, masks_dir, feature_extractor, size=512, augmentations=None):
         self.images_dir = images_dir
         self.masks_dir  = masks_dir
         self.extractor  = feature_extractor
         self.size       = size
+        self.augmentations = augmentations
 
         # List all image filenames
         imgs = sorted(
@@ -79,18 +82,26 @@ class SegDataset(Dataset):
         # Load mask at its native size
         msk = Image.open(msk_path).convert("L")
 
+        img_np  = np.array(img)
+        msk_np  = np.array(msk) 
+
+        if self.augmentations is not None:
+            augmented = self.augmentations(image=img_np, mask=msk_np)
+            img_np = augmented["image"]
+            msk_np = augmented["mask"]
+        img_aug = Image.fromarray(img_np)
+
         # Use the feature extractor to: resize to self.size, normalize, convert to tensor.
         encoding = self.extractor(
-            images=img,
+            images=img_aug,
             size=self.size,            # both height and width → self.size (e.g. 512)
             return_tensors="pt"
         )
         pixel_values = encoding["pixel_values"].squeeze(0)  # shape: (3, self.size, self.size)
 
         # Resize the mask the same way, with nearest neighbor (to preserve integer labels).
-        msk_resized = msk.resize((self.size, self.size), resample=Image.NEAREST)
-        msk_resized_np = np.array(msk_resized, dtype=np.int64)
-        labels = torch.from_numpy(msk_resized_np).long()    # shape: (self.size, self.size)
+        msk_resized = Image.fromarray(msk_np).resize((self.size, self.size), resample=Image.NEAREST)
+        labels = torch.from_numpy(np.array(msk_resized, dtype=np.int64)).long()  # (size, size)
 
         return pixel_values, labels
 
@@ -132,12 +143,29 @@ def train_validate_test(args):
         print("Ignoring background pixels in loss calculation")
         model.config.ignore_index = 0  # Set ignore_index to 0 (background) for loss calculation
 
+    train_augmentations = A.Compose([
+        A.RandomScale(scale_limit=0.2,  # random factor in [1−0.2, 1+0.2]
+                  interpolation=cv2.INTER_LINEAR,
+                  mask_interpolation_method=cv2.INTER_NEAREST,
+                  p=1.0),
+
+        # Since RandomScale changes the image size, we force‐pad/crop back to a square of size 512×512
+        A.PadIfNeeded(min_height=512, min_width=512, border_mode=0),
+        A.RandomCrop(height=512, width=512),  # in case RandomScale made it bigger
+
+        A.HorizontalFlip(p=0.5),
+        A.VerticalFlip(p=0.2),
+        A.Rotate(limit=15, p=0.5),
+        A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),
+    ], additional_targets={"mask": "mask"})
+
     # Prepare Datasets and DataLoaders
     train_ds = SegDataset(
         images_dir=args.train_images,
         masks_dir=args.train_masks,
         feature_extractor=extractor,
         size=args.img_size,
+        augmentations=train_augmentations,
     )
     valid_ds = SegDataset(
         images_dir=args.valid_images,
@@ -344,18 +372,7 @@ def train_validate_test(args):
     "confusion_matrix_heatmap": wandb.sklearn.plot_confusion_matrix(
         all_labels_test,        # ground‐truth labels
         all_preds_test,         # predicted labels
-        labels=list(range(config.num_labels)),
-        class_names=class_names
-        )
-    })
-
-    wandb.log({
-    "confusion_matrix_heatmap_normalized": wandb.sklearn.plot_confusion_matrix(
-        all_labels_test,        # ground‐truth labels
-        all_preds_test,         # predicted labels
-        labels=list(range(config.num_labels)),
-        class_names=class_names,
-        normalize="true"
+        labels=list(range(config.num_labels))
         )
     })
 
