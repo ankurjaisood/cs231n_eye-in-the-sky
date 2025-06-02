@@ -13,10 +13,22 @@ from deep_sort_realtime.deepsort_tracker import DeepSort
 BIN_PATH = None
 
 # original model for 10 epochs
-BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/lr5e-5_bs8_ep10_20250530_224702/segformer-b4-finetuned-ade-512-512_20250530_231126_nl53_e10_bs8_lr5e-05_is512.bin"
+#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/lr5e-5_bs8_ep10_20250530_224702/segformer-b4-finetuned-ade-512-512_20250530_231126_nl53_e10_bs8_lr5e-05_is512.bin"
 
 # better model for 25 epochs
-BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/lr5e-5_bs8_ep25_20250531_194451/segformer-b4-finetuned-ade-512-512_20250531_194456_nl53_e25_bs8_lr5e-05_is512.bin"
+#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/lr5e-5_bs8_ep25_20250531_194451/segformer-b4-finetuned-ade-512-512_20250531_194456_nl53_e25_bs8_lr5e-05_is512.bin"
+
+# 13 classes, for 10 epochs, dont ignore background pixels
+#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-13_ignbg-0_lr5e-5_bs8_ep10_20250601_133004/segformer-b4-finetuned-ade-512-512_False_20250601_133009_nl13_e10_bs8_lr5e-05_is512.bin"
+
+# 13 classes, for 10 epochs, ignore background pixels
+#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-13_ignbg-1_lr5e-5_bs8_ep10_20250601_143122/segformer-b4-finetuned-ade-512-512_True_20250601_143127_nl13_e10_bs8_lr5e-05_is512.bin"
+
+# 4 classes, for 10 epochs, dont ignore background pixels
+#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-4_ignbg-0_lr5e-5_bs8_ep10_20250601_151247/segformer-b4-finetuned-ade-512-512_False_20250601_151252_nl4_e10_bs8_lr5e-05_is512.bin"
+
+# 4 classes, for 10 epochs, ignore background pixels
+BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-4_ignbg-1_lr5e-5_bs8_ep10_20250601_153859/segformer-b4-finetuned-ade-512-512_True_20250601_153903_nl4_e10_bs8_lr5e-05_is512.bin"
 
 # ignore background pixels for 10 epochs (didnt work well)
 #BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/lr5e-5_bs8_ep10_20250531_135500/segformer-b4-finetuned-ade-512-512_20250531_142024_nl53_e10_bs8_lr5e-05_is512.bin"
@@ -26,17 +38,17 @@ BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoi
 
 MODEL_NAME = "nvidia/segformer-b4-finetuned-ade-512-512"
 
-#VIDEO_IN  = "/home/anksood/cs231n/cs231n_eye-in-the-sky/git_datasets/clips/2_416px_30fps.mp4"
-VIDEO_IN  = "/home/anksood/cs231n/cs231n_eye-in-the-sky/git_datasets/11_416px_10fps.mp4"
-VIDEO_OUT = "./output5.mp4"
+VIDEO_IN  = "/home/anksood/cs231n/cs231n_eye-in-the-sky/git_datasets/clips/2_416px_10fps.mp4"
+#VIDEO_IN  = "/home/anksood/cs231n/cs231n_eye-in-the-sky/git_datasets/11_416px_10fps.mp4"
+VIDEO_OUT = "./output7_4classes_ign.mp4"
 IMG_SIZE = 512
 BATCH_SIZE = 32
 
 MIN_BB_AREA = 250
 MIN_PIXEL_REGION_AREA = 1500  # minimum area of a pixel region to be considered valid
-BB_CONFIDENCE_THRESHOLD = 0.25  # minimum confidence score for bounding boxes
+BB_CONFIDENCE_THRESHOLD = 0.5  # minimum confidence score for bounding boxes
 
-NUM_CLASSES = 53
+NUM_CLASSES = 4
 
  # 52 cards + background
 id2label = {
@@ -80,7 +92,7 @@ def run_segformer(images):
 def run_segformer_from_bin(images):
     # Load the base config from the Hub
     config = SegformerConfig.from_pretrained(MODEL_NAME)  
-    config.num_labels = 53
+    config.num_labels = NUM_CLASSES
     config.ignore_mismatched_sizes = True
 
     # Instantiate an empty SegFormerForSemanticSegmentation:
@@ -182,8 +194,8 @@ def create_output_video_from_masks(
         raise RuntimeError(f"Cannot open VideoWriter at {output_path}")
 
     # SORT tracker initalization
-    max_age_num_frames = int(fps * 0.5)
-    num_frames_new_track = max(1, int(fps) // 2)
+    max_age_num_frames = int(fps)
+    num_frames_new_track = max(1, int(fps))
     print(f"Initializing DeepSORT tracker with max_age={max_age_num_frames}, n_init={num_frames_new_track}")
     tracker = DeepSort(
         max_age=max_age_num_frames,
@@ -241,9 +253,9 @@ def create_output_video_from_masks(
             
             # Create a binary mask for this class
             binary = (mask_full == class_id).astype(np.uint8) * 255
-            kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (21,21))
+            kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11,11))
             binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_close)
-            kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11,11))
+            kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
             binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_open)
 
             # Find contours (connected components); OpenCV expects 8‐bit single channel
