@@ -7,9 +7,7 @@ import warnings
 import json
 import sys
 import yaml
-
-# Copy this file into the deep_sort_pytorch directory before running
-# Example: python deepsort_cards.py --VIDEO_PATH ../../cs231n_eye-in-the-sky/11_416px_10fps.mp4 --config_detection ./configs/yolov5s_cards.yaml --save_path ./OUTFOLDER --data_yaml ../yolov5/data_hilo.yaml
+import subprocess
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'thirdparty/fast-reid'))
 
@@ -85,6 +83,15 @@ class VideoTracker(object):
         self.deepsort = build_tracker(cfg, use_cuda=use_cuda)
         self.class_names = self.detector.class_names
 
+        # Initialize frame counter for tracking memory management (optional feature)
+        self.frames_without_detections = 0
+        self.max_frames_before_reset = args.max_frames_before_reset
+        self.memory_clearing_enabled = args.max_frames_before_reset is not None and args.max_frames_before_reset > 0
+
+        # Initialize class counting for accuracy evaluation
+        self.tracked_instances = {}  # track_id -> class_name mapping to avoid double counting
+        self.class_counts = {}  # final counts per class
+
     def __enter__(self):
         if self.args.cam != -1:
             ret, frame = self.vdo.read()
@@ -119,6 +126,76 @@ class VideoTracker(object):
     def __exit__(self, exc_type, exc_value, exc_traceback):
         if exc_type:
             print(exc_type, exc_value, exc_traceback)
+
+        # Close video writer
+        if hasattr(self, 'writer') and self.writer:
+            self.writer.release()
+
+        # Re-encode to x264 mp4 if save_path was used
+        if self.args.save_path and hasattr(self, 'save_video_path'):
+            self._reencode_to_x264_mp4()
+
+    def _reencode_to_x264_mp4(self):
+        """Re-encode the MJPG AVI video to x264 MP4 format"""
+        if not os.path.exists(self.save_video_path):
+            self.logger.warning(f"Original video file not found: {self.save_video_path}")
+            return
+
+        # Define output MP4 path
+        mp4_path = os.path.join(self.args.save_path, "results.mp4")
+
+        # Prioritize system ffmpeg over conda env version
+        if os.path.exists('/usr/bin/ffmpeg'):
+            ffmpeg_cmd = '/usr/bin/ffmpeg'
+            self.logger.info("Using system ffmpeg at /usr/bin/ffmpeg")
+        else:
+            ffmpeg_cmd = 'ffmpeg'
+            self.logger.info("Using ffmpeg from PATH")
+
+        try:
+            self.logger.info("Re-encoding video to x264 MP4...")
+
+            # FFmpeg command for x264 encoding with good quality settings
+            cmd = [
+                ffmpeg_cmd, '-y',  # -y to overwrite output file
+                '-i', self.save_video_path,  # input file
+                '-c:v', 'libx264',  # x264 codec
+                '-preset', 'medium',  # encoding speed/compression tradeoff
+                '-crf', '23',  # quality setting (lower = better quality)
+                '-pix_fmt', 'yuv420p',  # pixel format for compatibility
+                mp4_path  # output file
+            ]
+
+            # Run ffmpeg
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+            if os.path.exists(mp4_path):
+                # Get file sizes for comparison
+                avi_size = os.path.getsize(self.save_video_path) / (1024 * 1024)  # MB
+                mp4_size = os.path.getsize(mp4_path) / (1024 * 1024)  # MB
+
+                self.logger.info(f"Re-encoding successful!")
+                self.logger.info(f"Original AVI: {avi_size:.1f} MB")
+                self.logger.info(f"X264 MP4: {mp4_size:.1f} MB")
+                self.logger.info(f"Saved to: {mp4_path}")
+
+                # Optionally remove the original AVI file
+                try:
+                    os.remove(self.save_video_path)
+                    self.logger.info("Original AVI file removed")
+                except Exception as e:
+                    self.logger.warning(f"Could not remove original AVI: {e}")
+            else:
+                self.logger.error("Re-encoding failed - output file not created")
+
+        except subprocess.CalledProcessError as e:
+            self.logger.error(f"FFmpeg failed with return code {e.returncode}")
+            self.logger.error(f"Error output: {e.stderr}")
+        except FileNotFoundError:
+            self.logger.error("FFmpeg not found. Please install FFmpeg to enable x264 re-encoding.")
+            self.logger.info("The original AVI file is still available at: {}".format(self.save_video_path))
+        except Exception as e:
+            self.logger.error(f"Unexpected error during re-encoding: {e}")
 
     def run(self):
         results = []
@@ -166,6 +243,21 @@ class VideoTracker(object):
                 if self.args.segment and len(bbox_xywh) > 0:
                     seg_masks = seg_masks[mask]
 
+            # Handle tracker memory management based on detections (only if enabled)
+            if self.memory_clearing_enabled:
+                if len(bbox_xywh) > 0:
+                    # Reset counter when detections are present
+                    self.frames_without_detections = 0
+                else:
+                    # Increment counter when no detections
+                    self.frames_without_detections += 1
+
+                    # Clear tracker memory if no detections for specified frames
+                    if self.frames_without_detections >= self.max_frames_before_reset:
+                        self._clear_tracker_memory()
+                        self.frames_without_detections = 0  # Reset counter after clearing
+                        self.logger.info(f"Cleared tracker memory after {self.max_frames_before_reset} frames without detections")
+
             # do tracking
             if len(bbox_xywh) > 0:
                 if self.args.segment:
@@ -183,6 +275,18 @@ class VideoTracker(object):
                 identities = outputs[:, -1]
                 cls = outputs[:, -2]
                 names = [self.idx_to_class.get(str(int(label)), f"class_{int(label)}") for label in cls]
+
+                # Track unique instances of each class for counting
+                for identity, class_id in zip(identities, cls):
+                    track_id = int(identity)
+                    class_name = self.idx_to_class.get(str(int(class_id)), f"class_{int(class_id)}")
+
+                    # Only count each track_id once per class
+                    if track_id not in self.tracked_instances:
+                        self.tracked_instances[track_id] = class_name
+                        if class_name not in self.class_counts:
+                            self.class_counts[class_name] = 0
+                        self.class_counts[class_name] += 1
 
                 ori_im = draw_boxes(ori_im, bbox_xyxy, names, identities, None if not self.args.segment else mask_outputs)
 
@@ -208,6 +312,52 @@ class VideoTracker(object):
             self.logger.info("time: {:.03f}s, fps: {:.03f}, detection numbers: {}, tracking numbers: {}" \
                              .format(end - start, 1 / (end - start), len(bbox_xywh) if len(bbox_xywh) > 0 else 0, len(outputs)))
 
+        # Output final class counts
+        self._output_class_counts()
+
+    def _clear_tracker_memory(self):
+        """Clear all tracker memory including tracks and reset ID counter"""
+        # Clear all active tracks
+        self.deepsort.tracker.tracks = []
+
+        # Reset the ID counter to start fresh
+        self.deepsort.tracker._next_id = 1
+
+        # Clear the distance metric memory if it has samples
+        if hasattr(self.deepsort.tracker.metric, 'samples'):
+            self.deepsort.tracker.metric.samples = {}
+
+    def _output_class_counts(self):
+        """Output the final counts of each class detected in the video"""
+        print("\n" + "="*50)
+        print("DETECTION SUMMARY")
+        print("="*50)
+
+        if not self.class_counts:
+            print("No classes detected in this video.")
+            return
+
+        # Sort by class name for consistent output
+        sorted_classes = sorted(self.class_counts.items())
+
+        print("Total unique instances detected:")
+        for class_name, count in sorted_classes:
+            print(f"  {class_name}: {count}")
+
+        print(f"\nTotal unique tracks: {len(self.tracked_instances)}")
+
+        # Save to file if save_path is specified
+        if self.args.save_path:
+            counts_file = os.path.join(self.args.save_path, "class_counts.json")
+            try:
+                with open(counts_file, 'w') as f:
+                    json.dump(self.class_counts, f, indent=2)
+                print(f"\nClass counts saved to: {counts_file}")
+            except Exception as e:
+                self.logger.warning(f"Could not save class counts: {e}")
+
+        print("="*50)
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -232,6 +382,8 @@ def parse_args():
                        help="Path to data YAML file containing class names (e.g., data_hilo.yaml or data.yaml)")
     parser.add_argument("--conf_threshold", type=float, default=0.5, help="Confidence threshold for detections")
     parser.add_argument("--target_classes", nargs="+", type=int, help="Specific card class IDs to track (default: all)")
+    parser.add_argument("--max_frames_before_reset", type=int, default=None,
+                       help="Number of consecutive frames without detections before clearing tracker memory (default: disabled)")
 
     return parser.parse_args()
 
