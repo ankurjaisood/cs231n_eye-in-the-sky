@@ -1,6 +1,7 @@
 import os
 import torch
 import cv2
+import json
 import numpy as np
 from transformers import (
     SegformerForSemanticSegmentation, 
@@ -10,45 +11,23 @@ from transformers import (
 from PIL import Image
 from deep_sort_realtime.deepsort_tracker import DeepSort
 
-BIN_PATH = None
-
-# original model for 10 epochs
-#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/lr5e-5_bs8_ep10_20250530_224702/segformer-b4-finetuned-ade-512-512_20250530_231126_nl53_e10_bs8_lr5e-05_is512.bin"
-
-# better model for 25 epochs
-#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/lr5e-5_bs8_ep25_20250531_194451/segformer-b4-finetuned-ade-512-512_20250531_194456_nl53_e25_bs8_lr5e-05_is512.bin"
-
-# 13 classes, for 10 epochs, dont ignore background pixels
-#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-13_ignbg-0_lr5e-5_bs8_ep10_20250601_133004/segformer-b4-finetuned-ade-512-512_False_20250601_133009_nl13_e10_bs8_lr5e-05_is512.bin"
-
-# 13 classes, for 10 epochs, ignore background pixels
-#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-13_ignbg-1_lr5e-5_bs8_ep10_20250601_143122/segformer-b4-finetuned-ade-512-512_True_20250601_143127_nl13_e10_bs8_lr5e-05_is512.bin"
-
-# 4 classes, for 10 epochs, dont ignore background pixels
-#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-4_ignbg-0_lr5e-5_bs8_ep10_20250601_151247/segformer-b4-finetuned-ade-512-512_False_20250601_151252_nl4_e10_bs8_lr5e-05_is512.bin"
-
-# 4 classes, for 10 epochs, ignore background pixels
-BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-4_ignbg-1_lr5e-5_bs8_ep10_20250601_153859/segformer-b4-finetuned-ade-512-512_True_20250601_153903_nl4_e10_bs8_lr5e-05_is512.bin"
-
-# ignore background pixels for 10 epochs (didnt work well)
-#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/lr5e-5_bs8_ep10_20250531_135500/segformer-b4-finetuned-ade-512-512_20250531_142024_nl53_e10_bs8_lr5e-05_is512.bin"
-
-# ignore background pixels for 20 epochs (worked ok)
-#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/lr5e-5_bs8_ep20_20250531_142026/segformer-b4-finetuned-ade-512-512_20250531_151105_nl53_e20_bs8_lr5e-05_is512.bin"
-
+VERBOSE = False
+#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-13_ignbg-1_lr5e-5_bs16_ep20_20250601_192035/segformer-b4-finetuned-ade-512-512_True_20250601_192040_nl13_e20_bs16_lr5e-05_is512.bin"
+#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-4_ignbg-1_lr5e-5_bs16_ep20_20250601_221104/segformer-b4-finetuned-ade-512-512_True_20250601_221109_nl4_e20_bs16_lr5e-05_is512.bin"
+#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-13_ignbg-0_lr5e-5_bs16_ep60_20250601_231541/segformer-b4-finetuned-ade-512-512_False_20250601_231546_nl13_e60_bs16_lr5e-05_is512.bin"
+BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-13_ignbg-0_lr5e-5_bs16_ep60_20250602_142134/segformer-b4-finetuned-ade-512-512_False_20250602_142138_nl13_e60_bs16_lr5e-05_is512.bin"
 MODEL_NAME = "nvidia/segformer-b4-finetuned-ade-512-512"
+NUM_CLASSES = 13
 
-VIDEO_IN  = "/home/anksood/cs231n/cs231n_eye-in-the-sky/git_datasets/clips/2_416px_10fps.mp4"
-#VIDEO_IN  = "/home/anksood/cs231n/cs231n_eye-in-the-sky/git_datasets/11_416px_10fps.mp4"
-VIDEO_OUT = "./output7_4classes_ign.mp4"
+VIDEO_IN_DIR  = "/home/anksood/cs231n/cs231n_eye-in-the-sky/git_datasets/clips_416_square/"
 IMG_SIZE = 512
-BATCH_SIZE = 32
+BATCH_SIZE = 4
 
 MIN_BB_AREA = 250
 MIN_PIXEL_REGION_AREA = 1500  # minimum area of a pixel region to be considered valid
-BB_CONFIDENCE_THRESHOLD = 0.5  # minimum confidence score for bounding boxes
+BB_CONFIDENCE_THRESHOLD = 0.60  # minimum confidence score for bounding boxes
 
-NUM_CLASSES = 4
+IGNORE_FIRST_N_FRAMES = 0
 
  # 52 cards + background
 id2label = {
@@ -117,7 +96,7 @@ def run_segformer_from_bin(images):
 
 def extract_frames_from_video(video_path: str) -> (list, float):
     """
-    Read all frames from `video_path` and return a list of BGR numpy arrays,
+    Read all frames from video_path and return a list of BGR numpy arrays,
     plus the video FPS. 
     """
     cap = cv2.VideoCapture(video_path)
@@ -151,7 +130,7 @@ def frames_to_resized_pil(frames: list, size: int) -> list:
 
 def colorize_mask(mask: np.ndarray) -> np.ndarray:
     """
-    Convert a 2D array of class indices (H×W, int) into a BGR color image
+    Convert a 2D array of class indices (H x W, int) into a BGR color image
     using OpenCV's JET colormap. Returns a (H, W, 3) uint8 image.
     """
     mask_flat = mask.astype(np.float32).flatten()
@@ -172,9 +151,9 @@ def create_output_video_from_masks(
     fps: float
 ):
     """
-    Given a list of original BGR frames (H_orig × W_orig × 3), and a torch.Tensor `masks`
+    Given a list of original BGR frames (H_orig x W_orig x 3), and a torch.Tensor `masks`
     of shape (N, H_mask, W_mask) containing integer class indices,
-    up‐sample each mask to the original frame size, colorize it, and write side‐by‐side
+    up‐sample each mask to the original frame size, colorize it, and write side by side
     to `output_path` at the given `fps`.
     """
     num_frames = len(original_frames)
@@ -194,29 +173,60 @@ def create_output_video_from_masks(
         raise RuntimeError(f"Cannot open VideoWriter at {output_path}")
 
     # SORT tracker initalization
-    max_age_num_frames = int(fps)
-    num_frames_new_track = max(1, int(fps))
+    max_age_num_frames = int(fps * 2)
+    num_frames_new_track = max(1, int(fps * 0.5))
     print(f"Initializing DeepSORT tracker with max_age={max_age_num_frames}, n_init={num_frames_new_track}")
     tracker = DeepSort(
+        max_cosine_distance=0.2,
+        nms_max_overlap=0.5,
         max_age=max_age_num_frames,
         n_init=num_frames_new_track, 
-        max_cosine_distance=0.2,
         embedder="clip_RN50x4",
         embedder_gpu=torch.cuda.is_available()
     )
 
+    class_map = {}
+    if NUM_CLASSES == 53:
+        class_map = id2label
+    elif NUM_CLASSES == 13:
+        class_map = id2label_suits_category
+    elif NUM_CLASSES == 4:
+        class_map = id2label_category
+    else:
+        raise ValueError(f"Unsupported number of classes: {NUM_CLASSES}")
+            
+    num_tracked_obj_dict = {c: list() for c in list(class_map.values()) + ["Low", "None", "High"]}
+    prev_smoothed_probs = None
+    smoothing_alpha = 0.8
     for idx in range(num_frames):
         frame_bgr = original_frames[idx]
         logits_small = logits[idx]
-        mask_small = masks[idx].cpu().numpy().astype(np.int32)  # (IMG_SIZE, IMG_SIZE)
 
         # Compute probs over mask
         with torch.no_grad():
             probs_small = torch.softmax(logits_small, dim=0).cpu().numpy()
 
+        # Temporal smoothing
+        if prev_smoothed_probs is None:
+            smoothed_probs = probs_small
+        else:
+            smoothed_probs = smoothing_alpha * prev_smoothed_probs + (1.0 - smoothing_alpha) * probs_small
+        prev_smoothed_probs = smoothed_probs
+
+        # Previously using masks from argmax from the model:
+        '''
+        mask_small = masks[idx].cpu().numpy().astype(np.int32)  # (IMG_SIZE, IMG_SIZE)
         # Upsample mask back to original size
         mask_full = cv2.resize(
             mask_small.astype(np.uint8),
+            (orig_w, orig_h),
+            interpolation=cv2.INTER_NEAREST
+        )
+        '''
+        # Use smoothed probabilities instead of argmax
+        smoothed_mask_small = np.argmax(smoothed_probs, axis=0).astype(np.uint8)  # shape: (H_mask, W_mask)
+        mask_full = cv2.resize(
+            smoothed_mask_small,
             (orig_w, orig_h),
             interpolation=cv2.INTER_NEAREST
         )
@@ -229,28 +239,25 @@ def create_output_video_from_masks(
         # For each unique class in mask_full, find contours and draw boxes, labels
         unique_ids = np.unique(mask_full)
         for class_id in unique_ids:
+            if idx < IGNORE_FIRST_N_FRAMES:
+                if VERBOSE: 
+                    print(f"Skipping first {IGNORE_FIRST_N_FRAMES} frames for initialization...")
+                continue
+
             # Skip background
             if class_id == 0:
                 continue
 
             # Upsample the probability map for this class to full resolution
-            prob_small = probs_small[class_id]  # shape: (H_mask, W_mask)
+            prob_small = smoothed_probs[class_id]  # shape: (H_mask, W_mask)
             prob_full = cv2.resize(
                 prob_small.astype(np.float32),
                 (orig_w, orig_h),
                 interpolation=cv2.INTER_LINEAR
             )  # shape: (orig_h, orig_w)
 
-            class_name = None
-            if NUM_CLASSES == 53:
-                class_name = id2label[class_id]
-            elif NUM_CLASSES == 13:
-                class_name = id2label_suits_category[class_id]
-            elif NUM_CLASSES == 4:
-                class_name = id2label_category[class_id]
-            else:
-                raise ValueError(f"Unsupported number of classes: {NUM_CLASSES}")
-            
+            class_name = class_map[class_id]
+
             # Create a binary mask for this class
             binary = (mask_full == class_id).astype(np.uint8) * 255
             kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11,11))
@@ -267,14 +274,16 @@ def create_output_video_from_masks(
                 if area_cc >= MIN_PIXEL_REGION_AREA:
                     filtered_contours.append(cnt)
                 else:
-                    print(f"Skipping small contour with area {area_cc} < {MIN_PIXEL_REGION_AREA}")
+                    if VERBOSE:
+                        print(f"Skipping small contour with area {area_cc} < {MIN_PIXEL_REGION_AREA}")
 
             # Draw a box + the class name for each contour
             for cnt in filtered_contours:
                 x, y, w, h = cv2.boundingRect(cnt)
                 area = w * h
                 if area < MIN_BB_AREA:
-                    print(f"Skipping small box with area {area} < {MIN_BB_AREA}")
+                    if VERBOSE:
+                        print(f"Skipping small box with area {area} < {MIN_BB_AREA}")
                     continue
 
                 # Build a mask for this contour to extract pixel probabilities
@@ -284,7 +293,8 @@ def create_output_video_from_masks(
                 score = float(pixel_probs.mean())
 
                 if score < BB_CONFIDENCE_THRESHOLD:
-                    print(f"Skipping box with low score {score:.2f} < {BB_CONFIDENCE_THRESHOLD}")
+                    if VERBOSE:
+                        print(f"Skipping box with low score {score:.2f} < {BB_CONFIDENCE_THRESHOLD}")
                     continue
 
                 x1, y1, x2, y2 = x, y, x + w, y + h
@@ -324,8 +334,19 @@ def create_output_video_from_masks(
             if not track.is_confirmed():
                 print(f"Skipping unconfirmed track {track.track_id}")
                 continue
+
             x1, y1, x2, y2 = map(int, track.to_tlbr())
             tid = track.track_id
+            t_class_name = track.det_class
+
+            if tid not in num_tracked_obj_dict[t_class_name]:
+                num_tracked_obj_dict[t_class_name].append(tid)
+            
+            class_name_collapsed = ""
+            if NUM_CLASSES == 13:
+                class_name_collapsed = t_class_name.split("_")[1]
+                if tid not in num_tracked_obj_dict[class_name_collapsed]:
+                    num_tracked_obj_dict[class_name_collapsed].append(tid)
 
             cv2.rectangle(
                 frame_bgr,
@@ -336,11 +357,11 @@ def create_output_video_from_masks(
             )
             cv2.putText(
                 frame_bgr,
-                f"ID:{tid}",
+                f"ID:{tid}-{class_name_collapsed}",
                 (x1, y1 - 5 if y1 - 5 > 5 else y1 + 15),
                 fontFace=cv2.FONT_HERSHEY_SIMPLEX,
                 fontScale=0.6,
-                color=(255, 255, 255),
+                color=(0, 0, 0),
                 thickness=1
             )
 
@@ -353,7 +374,7 @@ def create_output_video_from_masks(
         writer.write(combined)
 
         '''
-        # Optional: display in real-time
+        # Display in real-time
         cv2.imshow("Original | Segmentation", combined)
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
@@ -362,9 +383,15 @@ def create_output_video_from_masks(
         if (idx + 1) % 50 == 0:
             print(f"Written {idx + 1}/{num_frames} frames to video...")
 
+    print("Final tracked object counts per class:")
+    print(num_tracked_obj_dict)
+    out_path_json = os.path.splitext(output_path)[0] + ".json"
+    with open(out_path_json, "w") as f:
+        json.dump(num_tracked_obj_dict, f, indent=2)
+
     writer.release()
-    cv2.destroyAllWindows()
     print(f"Output video saved to: {output_path}")
+    print(f"Output JSON saved to: {out_path_json}")
 
 def process_video(video_in_path: str, video_out_path: str):
     """
@@ -401,6 +428,19 @@ def process_video(video_in_path: str, video_out_path: str):
     create_output_video_from_masks(original_frames, logits, masks, video_out_path, fps)
 
 if __name__ == "__main__":
-    if not os.path.isfile(VIDEO_IN):
-        raise FileNotFoundError(f"Input video file does not exist: {VIDEO_IN}")
-    process_video(VIDEO_IN, VIDEO_OUT)
+    if not os.path.isdir(VIDEO_IN_DIR):
+        raise ValueError(f"Input directory does not exist: {VIDEO_IN_DIR}")
+    
+    output_dir = os.path.join(VIDEO_IN_DIR, BIN_PATH.split("/")[-1].split(".")[0])
+    os.makedirs(output_dir, exist_ok=True)
+
+    for fname in os.listdir(VIDEO_IN_DIR):
+        if not fname.lower().endswith(".mp4"):
+            print(f"Skipping non-video file: {fname}")
+            continue
+        print(f"Processing video: {fname}")
+        
+        in_path = os.path.join(VIDEO_IN_DIR, fname)
+        out_path = os.path.join(output_dir, fname)
+
+        process_video(in_path, out_path)
