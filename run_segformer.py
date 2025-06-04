@@ -12,7 +12,10 @@ from PIL import Image
 from deep_sort_realtime.deepsort_tracker import DeepSort
 
 VERBOSE = False
-BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-13_ignbg-1_lr5e-5_bs16_ep20_20250601_192035/segformer-b4-finetuned-ade-512-512_True_20250601_192040_nl13_e20_bs16_lr5e-05_is512.bin"
+#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-13_ignbg-1_lr5e-5_bs16_ep20_20250601_192035/segformer-b4-finetuned-ade-512-512_True_20250601_192040_nl13_e20_bs16_lr5e-05_is512.bin"
+#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-4_ignbg-1_lr5e-5_bs16_ep20_20250601_221104/segformer-b4-finetuned-ade-512-512_True_20250601_221109_nl4_e20_bs16_lr5e-05_is512.bin"
+#BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-13_ignbg-0_lr5e-5_bs16_ep60_20250601_231541/segformer-b4-finetuned-ade-512-512_False_20250601_231546_nl13_e60_bs16_lr5e-05_is512.bin"
+BIN_PATH = "/home/anksood/cs231n/cs231n_eye-in-the-sky/models/segformer_checkpoints/model-segformer-b4-finetuned-ade-512-512_num-classes-13_ignbg-0_lr5e-5_bs16_ep60_20250602_142134/segformer-b4-finetuned-ade-512-512_False_20250602_142138_nl13_e60_bs16_lr5e-05_is512.bin"
 MODEL_NAME = "nvidia/segformer-b4-finetuned-ade-512-512"
 NUM_CLASSES = 13
 
@@ -22,7 +25,7 @@ BATCH_SIZE = 4
 
 MIN_BB_AREA = 250
 MIN_PIXEL_REGION_AREA = 1500  # minimum area of a pixel region to be considered valid
-BB_CONFIDENCE_THRESHOLD = 0.5  # minimum confidence score for bounding boxes
+BB_CONFIDENCE_THRESHOLD = 0.60  # minimum confidence score for bounding boxes
 
 IGNORE_FIRST_N_FRAMES = 0
 
@@ -170,8 +173,8 @@ def create_output_video_from_masks(
         raise RuntimeError(f"Cannot open VideoWriter at {output_path}")
 
     # SORT tracker initalization
-    max_age_num_frames = int(fps)
-    num_frames_new_track = max(1, int(fps))
+    max_age_num_frames = int(fps * 2)
+    num_frames_new_track = max(1, int(fps * 0.5))
     print(f"Initializing DeepSORT tracker with max_age={max_age_num_frames}, n_init={num_frames_new_track}")
     tracker = DeepSort(
         max_cosine_distance=0.2,
@@ -192,19 +195,38 @@ def create_output_video_from_masks(
     else:
         raise ValueError(f"Unsupported number of classes: {NUM_CLASSES}")
             
-    num_tracked_obj_dict = {c: list() for c in class_map.values()}
+    num_tracked_obj_dict = {c: list() for c in list(class_map.values()) + ["Low", "None", "High"]}
+    prev_smoothed_probs = None
+    smoothing_alpha = 0.8
     for idx in range(num_frames):
         frame_bgr = original_frames[idx]
         logits_small = logits[idx]
-        mask_small = masks[idx].cpu().numpy().astype(np.int32)  # (IMG_SIZE, IMG_SIZE)
 
         # Compute probs over mask
         with torch.no_grad():
             probs_small = torch.softmax(logits_small, dim=0).cpu().numpy()
 
+        # Temporal smoothing
+        if prev_smoothed_probs is None:
+            smoothed_probs = probs_small
+        else:
+            smoothed_probs = smoothing_alpha * prev_smoothed_probs + (1.0 - smoothing_alpha) * probs_small
+        prev_smoothed_probs = smoothed_probs
+
+        # Previously using masks from argmax from the model:
+        '''
+        mask_small = masks[idx].cpu().numpy().astype(np.int32)  # (IMG_SIZE, IMG_SIZE)
         # Upsample mask back to original size
         mask_full = cv2.resize(
             mask_small.astype(np.uint8),
+            (orig_w, orig_h),
+            interpolation=cv2.INTER_NEAREST
+        )
+        '''
+        # Use smoothed probabilities instead of argmax
+        smoothed_mask_small = np.argmax(smoothed_probs, axis=0).astype(np.uint8)  # shape: (H_mask, W_mask)
+        mask_full = cv2.resize(
+            smoothed_mask_small,
             (orig_w, orig_h),
             interpolation=cv2.INTER_NEAREST
         )
@@ -227,7 +249,7 @@ def create_output_video_from_masks(
                 continue
 
             # Upsample the probability map for this class to full resolution
-            prob_small = probs_small[class_id]  # shape: (H_mask, W_mask)
+            prob_small = smoothed_probs[class_id]  # shape: (H_mask, W_mask)
             prob_full = cv2.resize(
                 prob_small.astype(np.float32),
                 (orig_w, orig_h),
@@ -315,9 +337,16 @@ def create_output_video_from_masks(
 
             x1, y1, x2, y2 = map(int, track.to_tlbr())
             tid = track.track_id
+            t_class_name = track.det_class
 
-            if tid not in num_tracked_obj_dict[track.det_class]:
-                num_tracked_obj_dict[track.det_class].append(tid)
+            if tid not in num_tracked_obj_dict[t_class_name]:
+                num_tracked_obj_dict[t_class_name].append(tid)
+            
+            class_name_collapsed = ""
+            if NUM_CLASSES == 13:
+                class_name_collapsed = t_class_name.split("_")[1]
+                if tid not in num_tracked_obj_dict[class_name_collapsed]:
+                    num_tracked_obj_dict[class_name_collapsed].append(tid)
 
             cv2.rectangle(
                 frame_bgr,
@@ -328,11 +357,11 @@ def create_output_video_from_masks(
             )
             cv2.putText(
                 frame_bgr,
-                f"ID:{tid}",
+                f"ID:{tid}-{class_name_collapsed}",
                 (x1, y1 - 5 if y1 - 5 > 5 else y1 + 15),
                 fontFace=cv2.FONT_HERSHEY_SIMPLEX,
                 fontScale=0.6,
-                color=(255, 255, 255),
+                color=(0, 0, 0),
                 thickness=1
             )
 

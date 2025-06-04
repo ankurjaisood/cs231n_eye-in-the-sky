@@ -29,8 +29,8 @@ mkdir -p "$CHECKPOINT_BASE"
 MODEL_NAME=("nvidia/segformer-b4-finetuned-ade-512-512")
 LEARNING_RATES=(5e-5)
 BATCH_SIZES=(16)
-EPOCHS=(20)
-IGNORE_BACKGROUND=(0 1)
+EPOCHS=(60)
+IGNORE_BACKGROUND=(0)
 
 for model in "${MODEL_NAME[@]}"; do
     for lr in "${LEARNING_RATES[@]}"; do
