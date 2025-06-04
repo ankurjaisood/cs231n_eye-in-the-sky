@@ -14,6 +14,7 @@ from torch.utils.data import Dataset, DataLoader
 from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor
 from torch.optim import AdamW
 import albumentations as A
+from sklearn.metrics import precision_score, recall_score, average_precision_score
 
  # 52 cards + background
 id2label = {
@@ -394,6 +395,107 @@ def train_validate_test(args):
         "mean_IoU": mean_iou,
         **{f"IoU/class_{k}": per_class_iou[k-1] for k in range(1, num_labels)}
     })
+
+    # Compute pixel level overall precision
+    y_true_masked = None
+    y_pred_masked = None
+    if config.ignore_background:
+        mask_nonzero = (all_labels_test != 0)
+        y_true_masked = all_labels_test[mask_nonzero]
+        y_pred_masked = all_preds_test[mask_nonzero]
+    else:
+        y_true_masked = all_labels_test
+        y_pred_masked = all_preds_test
+
+    macro_prec = precision_score(
+        y_true_masked,
+        y_pred_masked,
+        average="macro",
+        zero_division=0
+    )
+    macro_rec = recall_score(
+        y_true_masked,
+        y_pred_masked,
+        average="macro",
+        zero_division=0
+    )
+
+    wandb.log({
+        "pixel_precision/macro": macro_prec,
+        "pixel_recall/macro": macro_rec
+    })
+
+
+    # per class pixel level precision
+    all_classes = list(range(config.num_labels))
+    if config.ignore_background:
+        # drop class 0 entirely from per-class reporting
+        all_classes = [c for c in all_classes if c != 0]
+
+    prec_per_class = precision_score(
+        y_true_masked,
+        y_pred_masked,
+        labels=all_classes,
+        average=None,
+        zero_division=0
+    )
+    rec_per_class = recall_score(
+        y_true_masked,
+        y_pred_masked,
+        labels=all_classes,
+        average=None,
+        zero_division=0
+    )
+
+    for idx, cls_idx in enumerate(all_classes):
+        classname = class_names[cls_idx]
+        wandb.log({
+            f"precision/class_{classname}": prec_per_class[idx],
+            f"recall/class_{classname}":    rec_per_class[idx]
+        })
+
+    # Compute per class avg precision
+    ap_per_class = []
+    for cls_idx in range(config.num_labels):
+        if config.ignore_background and cls_idx == 0:
+            continue
+
+        # Build one‐vs‐all label vectors
+        y_true_c = (y_true_masked == cls_idx).astype(int)
+        y_pred_c = (y_pred_masked == cls_idx).astype(int)
+        if y_true_c.sum() == 0:
+            # No ground‐truth pixels for this class → skip or assign AP=nan
+            ap = float("nan")
+        else:
+            ap = average_precision_score(y_true_c, y_pred_c)
+        ap_per_class.append((cls_idx, ap))
+        
+        wandb.log({f"AP/{class_names[cls_idx]}": ap})
+    
+    # Compute mAP_pixels = average over all valid classes (exclude nan)
+    ap_values = [v for (_, v) in ap_per_class if not np.isnan(v)]
+    mAP_pixels = float(np.mean(ap_values)) if len(ap_values) > 0 else float("nan")
+    wandb.log({"mAP_pixels": mAP_pixels})
+
+    # Loger per class PR
+    for cls_idx in range(config.num_labels):
+        if config.ignore_background and cls_idx == 0:
+            continue
+
+        y_true_c = (y_true_masked == cls_idx).astype(int)
+        y_pred_c = (y_pred_masked == cls_idx).astype(int)
+        if y_true_c.sum() == 0:
+            # no positive examples → skip
+            continue
+
+        pred_probs = np.vstack([1 - y_pred_c, y_pred_c]).T  # shape (N,2)
+        pr_data = wandb.plot.pr_curve(
+            y_true_c.tolist(),
+            pred_probs.tolist(),
+            labels=[0, 1]
+        )
+        wandb.log({f"pr_curve/{class_names[cls_idx]}": pr_data})
+
 
     # Save final checkpoint
     os.makedirs(args.output_dir, exist_ok=True)
