@@ -144,14 +144,14 @@ def train_validate_test(args):
         model.config.ignore_index = 0  # Set ignore_index to 0 (background) for loss calculation
 
     train_augmentations = A.Compose([
-        A.RandomScale(scale_limit=0.2,  # random factor in [1−0.2, 1+0.2]
-                  interpolation=cv2.INTER_LINEAR,
-                  mask_interpolation_method=cv2.INTER_NEAREST,
-                  p=1.0),
+        #A.RandomScale(scale_limit=0.2,  # random factor in [1−0.2, 1+0.2]
+        #          interpolation=cv2.INTER_LINEAR,
+        #          mask_interpolation=cv2.INTER_NEAREST,
+        #          p=1.0),
 
         # Since RandomScale changes the image size, force‐pad/crop back to a square of size 512×512
-        A.PadIfNeeded(min_height=512, min_width=512, border_mode=cv2.BORDER_CONSTANT, fill=0, fill_mask=0),
-        A.RandomCrop(height=512, width=512),  # in case RandomScale made it bigger
+        #A.PadIfNeeded(min_height=512, min_width=512, border_mode=cv2.BORDER_CONSTANT, fill=0, fill_mask=0),
+        #A.RandomCrop(height=512, width=512),  # in case RandomScale made it bigger
 
         A.HorizontalFlip(p=0.5),
         A.VerticalFlip(p=0.2),
