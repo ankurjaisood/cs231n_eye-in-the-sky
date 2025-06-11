@@ -477,26 +477,6 @@ def train_validate_test(args):
     mAP_pixels = float(np.mean(ap_values)) if len(ap_values) > 0 else float("nan")
     wandb.log({"mAP_pixels": mAP_pixels})
 
-    # Loger per class PR
-    for cls_idx in range(config.num_labels):
-        if config.ignore_background and cls_idx == 0:
-            continue
-
-        y_true_c = (y_true_masked == cls_idx).astype(int)
-        y_pred_c = (y_pred_masked == cls_idx).astype(int)
-        if y_true_c.sum() == 0:
-            # no positive examples → skip
-            continue
-
-        pred_probs = np.vstack([1 - y_pred_c, y_pred_c]).T  # shape (N,2)
-        pr_data = wandb.plot.pr_curve(
-            y_true_c.tolist(),
-            pred_probs.tolist(),
-            labels=[0, 1]
-        )
-        wandb.log({f"pr_curve/{class_names[cls_idx]}": pr_data})
-
-
     # Save final checkpoint
     os.makedirs(args.output_dir, exist_ok=True)
 
