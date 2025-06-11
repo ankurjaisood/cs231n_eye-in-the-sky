@@ -1,0 +1,142 @@
+{
+    "1.mp4": {
+        "classes": {
+                "low": 1,
+                "none": 1,
+                "high": 2
+        }
+    },
+    "2.mp4": {
+        "classes": {
+            "low": 3,
+            "none": 1,
+            "high": 2
+        }
+    },
+    "3.mp4": {
+        "classes": {
+            "low": 3,
+            "none": 2,
+            "high": 2
+        }
+    },
+    "4.mp4": {
+        "classes": {
+            "low": 4,
+            "none": 1,
+            "high": 1
+        }
+    },
+    "5.mp4": {
+        "classes": {
+            "low": 2,
+            "none": 0,
+            "high": 3
+        }
+    },
+    "6.mp4": {
+        "classes": {
+            "low": 3,
+            "none": 0,
+            "high": 2
+        }
+    },
+    "7.mp4": {
+        "classes": {
+            "low": 2,
+            "none": 0,
+            "high": 4
+        }
+    },
+    "8.mp4": {
+        "classes": {
+            "low": 2,
+            "none": 1,
+            "high": 3
+        }
+    },
+    "9.mp4": {
+        "classes": {
+            "low": 2,
+            "none": 4,
+            "high": 0
+        }
+    },
+    "10.mp4": {
+        "classes": {
+            "low": 1,
+            "none": 0,
+            "high": 3
+        }
+    },
+    "11.mp4": {
+        "classes": {
+            "low": 1,
+            "none": 1,
+            "high": 2
+        }
+    },
+    "12.mp4": {
+        "classes": {
+            "low": 0,
+            "none": 1,
+            "high": 3
+        }
+    },
+    "13.mp4": {
+        "classes": {
+            "low": 4,
+            "none": 2,
+            "high": 0
+        }
+    },
+    "14.mp4": {
+        "classes": {
+            "low": 2,
+            "none": 1,
+            "high": 2
+        }
+    },
+    "15.mp4": {
+        "classes": {
+            "low": 0,
+            "none": 1,
+            "high": 3
+        }
+    },
+    "16.mp4": {
+        "classes": {
+            "low": 7,
+            "none": 0,
+            "high": 2
+        }
+    },
+    "17.mp4": {
+        "classes": {
+            "low": 2,
+            "none": 1,
+            "high": 2
+        }
+    },
+    "18.mp4": {
+        "classes": {
+            "low": 0,
+            "none": 2,
+            "high": 2
+        }
+    },
+    "19.mp4": {
+        "classes": {
+            "low": 1,
+            "none": 1,
+            "high": 3
+        }
+    },
+    "20.mp4": {
+        "classes": {
+            "low": 4,
+            "none": 1,
+            "high": 2
+        }
+    }
+}

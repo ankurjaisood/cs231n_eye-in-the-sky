@@ -95,9 +95,10 @@ def create_hilo_error_histogram(errors, video_counts, output_prefix="hilo_error_
     perfect_predictions = video_counts[errors.index(0)] if 0 in errors else 0
     accuracy_percentage = (perfect_predictions / total_videos) * 100 if total_videos > 0 else 0
 
-    stats_text = f'Total Videos: {total_videos}\nPerfect Predictions (Error = 0): {perfect_predictions} ({accuracy_percentage:.1f}%)'
-    plt.text(0.02, 0.98, stats_text, transform=plt.gca().transAxes,
-             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+    # stats_text = f'Total Videos: {total_videos}\nPerfect Predictions (Error = 0): {perfect_predictions} ({accuracy_percentage:.1f}%)'
+    # plt.text(0.98, 0.98, stats_text, transform=plt.gca().transAxes,
+    #          horizontalalignment='right', verticalalignment='top',
+    #          bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
 
     # Adjust layout to prevent clipping
     plt.tight_layout()
