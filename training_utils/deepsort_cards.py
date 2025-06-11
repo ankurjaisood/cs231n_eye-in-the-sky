@@ -9,6 +9,11 @@ import sys
 import yaml
 import subprocess
 
+# This file is used to run deepsort on the cards dataset using YOLOv5 detectors.
+# Forked from https://github.com/ZQPei/deep_sort_pytorch
+
+# To run, clone the repo above and run this file.
+
 sys.path.append(os.path.join(os.path.dirname(__file__), 'thirdparty/fast-reid'))
 
 from detector import build_detector
@@ -92,40 +97,44 @@ class VideoTracker(object):
         self.tracked_instances = {}  # track_id -> class_name mapping to avoid double counting
         self.class_counts = {}  # final counts per class
 
-        # Enhanced counting metrics
-        self.total_detections = {}  # Total detections per class across all frames
-        self.frame_detections = {}  # Detections per frame for analysis
-        self.track_lifecycles = {}  # Track ID -> {class, first_frame, last_frame, total_frames}
-        self.current_frame = 0
-
     def __enter__(self):
         if self.args.cam != -1:
             ret, frame = self.vdo.read()
             assert ret, "Error: Camera error"
             self.im_width = frame.shape[0]
             self.im_height = frame.shape[1]
+            # For camera, use default fps or set manually
+            self.input_fps = 30.0  # Default for camera
 
         else:
             assert os.path.isfile(self.video_path), "Path error"
             self.vdo.open(self.video_path)
             self.im_width = int(self.vdo.get(cv2.CAP_PROP_FRAME_WIDTH))
             self.im_height = int(self.vdo.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+            # Get input video frame rate
+            self.input_fps = self.vdo.get(cv2.CAP_PROP_FPS)
+            if self.input_fps <= 0 or self.input_fps > 120:  # Sanity check
+                self.input_fps = 30.0  # Fallback to 30fps
+                self.logger.warning(f"Invalid input fps detected, using fallback: {self.input_fps}")
+            else:
+                self.logger.info(f"Input video fps: {self.input_fps}")
+
             assert self.vdo.isOpened()
 
         if self.args.save_path:
             os.makedirs(self.args.save_path, exist_ok=True)
-            # TODO save masks
 
             # path of saved video and results
             self.save_video_path = os.path.join(self.args.save_path, "results.avi")
             self.save_results_path = os.path.join(self.args.save_path, "results.txt")
 
-            # create video writer
+            # create video writer with matching fps
             fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-            self.writer = cv2.VideoWriter(self.save_video_path, fourcc, 20, (self.im_width, self.im_height))
+            self.writer = cv2.VideoWriter(self.save_video_path, fourcc, self.input_fps, (self.im_width, self.im_height))
 
             # logging
-            self.logger.info("Save results to {}".format(self.args.save_path))
+            self.logger.info("Save results to {} at {:.1f} fps".format(self.args.save_path, self.input_fps))
 
         return self
 
@@ -209,7 +218,6 @@ class VideoTracker(object):
 
         while self.vdo.grab():
             idx_frame += 1
-            self.current_frame = idx_frame  # Track current frame for enhanced metrics
             if idx_frame % self.args.frame_interval:
                 continue
 
@@ -283,45 +291,17 @@ class VideoTracker(object):
                 cls = outputs[:, -2]
                 names = [self.idx_to_class.get(str(int(label)), f"class_{int(label)}") for label in cls]
 
-                # Enhanced tracking and counting
-                frame_class_counts = {}  # Count detections in this frame
-
+                # Track unique instances of each class for counting
                 for identity, class_id in zip(identities, cls):
                     track_id = int(identity)
                     class_name = self.idx_to_class.get(str(int(class_id)), f"class_{int(class_id)}")
 
-                    # Count total detections per class across all frames
-                    if class_name not in self.total_detections:
-                        self.total_detections[class_name] = 0
-                    self.total_detections[class_name] += 1
-
-                    # Count detections in this frame
-                    if class_name not in frame_class_counts:
-                        frame_class_counts[class_name] = 0
-                    frame_class_counts[class_name] += 1
-
-                    # Track unique instances (original logic)
+                    # Only count each track_id once per class
                     if track_id not in self.tracked_instances:
                         self.tracked_instances[track_id] = class_name
                         if class_name not in self.class_counts:
                             self.class_counts[class_name] = 0
                         self.class_counts[class_name] += 1
-
-                        # Initialize track lifecycle
-                        self.track_lifecycles[track_id] = {
-                            'class': class_name,
-                            'first_frame': self.current_frame,
-                            'last_frame': self.current_frame,
-                            'total_frames': 1
-                        }
-                    else:
-                        # Update track lifecycle
-                        if track_id in self.track_lifecycles:
-                            self.track_lifecycles[track_id]['last_frame'] = self.current_frame
-                            self.track_lifecycles[track_id]['total_frames'] += 1
-
-                # Store frame-level detection counts
-                self.frame_detections[self.current_frame] = frame_class_counts
 
                 ori_im = draw_boxes(ori_im, bbox_xyxy, names, identities, None if not self.args.segment else mask_outputs)
 
@@ -363,135 +343,35 @@ class VideoTracker(object):
             self.deepsort.tracker.metric.samples = {}
 
     def _output_class_counts(self):
-        """Output comprehensive detection and tracking statistics"""
-        print("\n" + "="*70)
-        print("COMPREHENSIVE DETECTION SUMMARY")
-        print("="*70)
+        """Output the final counts of each class detected in the video"""
+        print("\n" + "="*50)
+        print("DETECTION SUMMARY")
+        print("="*50)
 
-        if not self.class_counts and not self.total_detections:
-            print("No classes detected in this video.")
-            return
-
-        # Get all classes that were detected
-        all_classes = set(self.class_counts.keys()) | set(self.total_detections.keys())
-
-        if not all_classes:
+        if not self.class_counts:
             print("No classes detected in this video.")
             return
 
         # Sort by class name for consistent output
-        sorted_classes = sorted(all_classes)
+        sorted_classes = sorted(self.class_counts.items())
 
-        # Print detailed statistics
-        print(f"{'Class':<8} {'Unique':<8} {'Total':<8} {'Avg/Track':<10} {'Max/Frame':<10}")
-        print("-" * 50)
+        print("Total unique instances detected:")
+        for class_name, count in sorted_classes:
+            print(f"  {class_name}: {count}")
 
-        stats_summary = {}
+        print(f"\nTotal unique tracks: {len(self.tracked_instances)}")
 
-        for class_name in sorted_classes:
-            unique_tracks = self.class_counts.get(class_name, 0)
-            total_detections = self.total_detections.get(class_name, 0)
-
-            # Calculate average detections per track
-            avg_per_track = total_detections / unique_tracks if unique_tracks > 0 else 0
-
-            # Find maximum detections in a single frame for this class
-            max_in_frame = 0
-            for frame_counts in self.frame_detections.values():
-                frame_count = frame_counts.get(class_name, 0)
-                max_in_frame = max(max_in_frame, frame_count)
-
-            print(f"{class_name:<8} {unique_tracks:<8} {total_detections:<8} {avg_per_track:<10.1f} {max_in_frame:<10}")
-
-            stats_summary[class_name] = {
-                'unique_tracks': unique_tracks,
-                'total_detections': total_detections,
-                'avg_detections_per_track': round(avg_per_track, 2),
-                'max_detections_in_frame': max_in_frame
-            }
-
-        print("-" * 50)
-        print(f"{'TOTALS':<8} {sum(self.class_counts.values()):<8} {sum(self.total_detections.values()):<8}")
-
-        # Track lifecycle analysis
-        print(f"\nTrack Lifecycle Analysis:")
-        print(f"Total unique tracks: {len(self.tracked_instances)}")
-        print(f"Total frames processed: {self.current_frame}")
-
-        # Find longest and shortest tracks
-        if self.track_lifecycles:
-            track_durations = [(tid, info['total_frames']) for tid, info in self.track_lifecycles.items()]
-            longest_track = max(track_durations, key=lambda x: x[1])
-            shortest_track = min(track_durations, key=lambda x: x[1])
-            avg_duration = sum(duration for _, duration in track_durations) / len(track_durations)
-
-            print(f"Longest track: ID {longest_track[0]} ({longest_track[1]} frames)")
-            print(f"Shortest track: ID {shortest_track[0]} ({shortest_track[1]} frames)")
-            print(f"Average track duration: {avg_duration:.1f} frames")
-
-        # Save comprehensive statistics to files
+        # Save to file if save_path is specified
         if self.args.save_path:
-            self._save_comprehensive_stats(stats_summary)
-
-        print("="*70)
-
-    def _save_comprehensive_stats(self, stats_summary):
-        """Save comprehensive statistics to JSON files"""
-        try:
-            # Original class counts (for backward compatibility)
             counts_file = os.path.join(self.args.save_path, "class_counts.json")
-            with open(counts_file, 'w') as f:
-                json.dump(self.class_counts, f, indent=2)
-            print(f"\nUnique track counts saved to: {counts_file}")
+            try:
+                with open(counts_file, 'w') as f:
+                    json.dump(self.class_counts, f, indent=2)
+                print(f"\nClass counts saved to: {counts_file}")
+            except Exception as e:
+                self.logger.warning(f"Could not save class counts: {e}")
 
-            # Total detections
-            total_detections_file = os.path.join(self.args.save_path, "total_detections.json")
-            with open(total_detections_file, 'w') as f:
-                json.dump(self.total_detections, f, indent=2)
-            print(f"Total detection counts saved to: {total_detections_file}")
-
-            # Comprehensive statistics
-            comprehensive_file = os.path.join(self.args.save_path, "detection_statistics.json")
-            comprehensive_data = {
-                'summary_by_class': stats_summary,
-                'total_unique_tracks': len(self.tracked_instances),
-                'total_frames_processed': self.current_frame,
-                'track_lifecycles': self.track_lifecycles,
-                'frame_by_frame_counts': self.frame_detections
-            }
-            with open(comprehensive_file, 'w') as f:
-                json.dump(comprehensive_data, f, indent=2)
-            print(f"Comprehensive statistics saved to: {comprehensive_file}")
-
-            # Summary report
-            report_file = os.path.join(self.args.save_path, "detection_report.txt")
-            with open(report_file, 'w') as f:
-                f.write("DeepSORT Card Detection Report\n")
-                f.write("=" * 40 + "\n\n")
-
-                f.write("SUMMARY:\n")
-                f.write(f"Total unique tracks: {len(self.tracked_instances)}\n")
-                f.write(f"Total detections: {sum(self.total_detections.values())}\n")
-                f.write(f"Total frames processed: {self.current_frame}\n\n")
-
-                f.write("DETECTIONS BY CLASS:\n")
-                f.write(f"{'Class':<8} {'Unique':<8} {'Total':<8} {'Avg/Track':<10}\n")
-                f.write("-" * 40 + "\n")
-
-                for class_name, stats in stats_summary.items():
-                    f.write(f"{class_name:<8} {stats['unique_tracks']:<8} {stats['total_detections']:<8} {stats['avg_detections_per_track']:<10}\n")
-
-                if self.track_lifecycles:
-                    track_durations = [info['total_frames'] for info in self.track_lifecycles.values()]
-                    f.write(f"\nTRACK ANALYSIS:\n")
-                    f.write(f"Average track duration: {sum(track_durations)/len(track_durations):.1f} frames\n")
-                    f.write(f"Longest track: {max(track_durations)} frames\n")
-                    f.write(f"Shortest track: {min(track_durations)} frames\n")
-
-            print(f"Detection report saved to: {report_file}")
-
-        except Exception as e:
-            self.logger.warning(f"Could not save comprehensive statistics: {e}")
+        print("="*50)
 
 
 def parse_args():
