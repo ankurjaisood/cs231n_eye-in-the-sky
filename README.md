@@ -1,5 +1,8 @@
-# DEMO VIDEO
+# Demo Video
 https://www.youtube.com/watch?v=yUcEbM6uDno
+
+# Report
+https://cs231n.stanford.edu/papers/text_file_840589501-CS231n_Final_Project.pdf
 
 # How to run:
 1. Gather datasets at ./datasets (see README in ./datasets)
